@@ -7,7 +7,7 @@ import lasagne
 
 # parameters
 model = 'mlp'
-num_epochs = 10
+num_epochs = 100
 minibatch_size = 20
 noise_scale = .3
 
@@ -191,46 +191,53 @@ def softmax(x):
 
 
 
-def compute_relevance(X, network):
+def compute_relevance(X, network, target, plot_heatmap=True):
+    def plot_heatmaps(X, R_i, target):
+        if target == 0:
+            target_title = "left open"
+        elif target == 1:
+            target_title = "right open"
+        elif target == 2:
+            target_title = "top open"
+        elif target == 3:
+            target_title = "bottom open"
+        import matplotlib.pyplot as plt
+        fig, axes = plt.subplots(1, 2, figsize=(15, 10))
+        plot1 = axes[0].pcolor(X)
+        plt.colorbar(plot1, ax=axes[0])
+        axes[0].set_title("Input image")
+        plot2 = axes[1].pcolor(R_i)
+        axes[1].set_title("Relevance, " + target_title)
+        plt.colorbar(plot1, ax=axes[1])
+        plt.show()
+
     W1_var, b1_var, W2_var, b2_var = lasagne.layers.get_all_params(network)
     W1 = W1_var.get_value().T
     W2 = W2_var.get_value().T
     b1 = b1_var.get_value().T
     b2 = b2_var.get_value().T
-    # propagate
-    X = X.flatten()
-    hid1_z = np.dot(W1, X) + b1
+    X_flat = X.flatten()
+    hid1_z = np.dot(W1, X_flat) + b1
     hid1_act = np.copy(hid1_z)
     hid1_act[hid1_act < 0] = 0
     output_layer_z = np.dot(W2, hid1_act.flatten()) + b2
     output_layer_act = softmax(output_layer_z)
     output_layer_act
 
-    W_z_mat1 = np.multiply(W1, X.T)
+    W_z_mat1 = np.multiply(W1, X_flat.T)
     #W_z_mat2 = np.multiply(W2, hid1_act.T)
 
-    R_k_over_z_k = output_layer_act[0] / output_layer_z[0]
+    R_k_over_z_k = output_layer_act[target] / output_layer_z[target]
     R_j = np.multiply(W2[0,:].T, hid1_act) * R_k_over_z_k
 
     R_j_over_z_j = np.divide(R_j, hid1_z)
     R_i = np.sum(np.multiply(W_z_mat1.T, R_j_over_z_j), axis=1)
-
     R_i = R_i.reshape((10, 10))
+    if plot_heatmap:
+        plot_heatmaps(X, R_i, target)
     return R_i
 
-R_i = compute_relevance(X_train[0][0], network)
-import matplotlib.pyplot as plt
-fig, axes = plt.subplots(1, 2, figsize=(15,10))
-plot1 = axes[0].pcolor(R_i)
-axes[0].set_title("Relevance per pixel")
-plt.colorbar(plot1, ax=axes[0])
-plot2 = axes[1].pcolor(X_train[0][0])
-plt.colorbar(plot2, ax=axes[1])
-axes[1].set_title("Input image")
-plt.show()
 
-
-
-#output = theano.function([input_var], lasagne.layers.get_output(all_layers[-1]))
-#my ut = output(X_train[np.newaxis, 0])
-#myout
+target = 3
+R_i = compute_relevance(X_train[0][0], network, target)
+R_i = compute_relevance(np.ones((10,10)), network, target)
