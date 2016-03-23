@@ -8,14 +8,13 @@ import matplotlib.pyplot as plt
 
 # parameters
 model = 'mlp'
-num_epochs = 50
+num_epochs = 5
 minibatch_size = 20
-noise_scale = .1
-loss_choice = "MSE"
-
+noise_scale = .3
+loss_choice = "categorical_crossentropy"
+layer_sizes = [200, 400, 300, 200]
 # some global variables
 INPUT_DIM = 10
-
 # controlling the behavior
 do_plotting = True
 
@@ -34,7 +33,7 @@ def get_category(target, loss_choice):
     elif loss_choice == "MSE":
         return np.argmax(target)
 
-def create_N_examples(loss_choice, N=500, noise_scale=.6):
+def create_N_examples(loss_choice, N=500, noise_scale=.1):
     pic = np.zeros((10, 10))
     pic[2:8, 2] = 1
     pic[2:8, 7] = 1
@@ -71,33 +70,30 @@ def load_dataset(loss_choice, noise_scale=.6):
     return X_train, y_train, X_val, y_val, X_test, y_test
 
 
-def build_mlp(input_var=None):
-    # This creates an MLP of two hidden layers of 800 units each, followed by
-    # a softmax output layer of 10 units. It applies 20% dropout to the input
-    # data and 50% dropout to the hidden layers.
+def build_mlp(input_var=None, layer_sizes=[200], loss_choice="categorical_crossentropy"):
+    ## Later I could still add the option to have different nonlinearities
 
-    # Input layer, specifying the expected input shape of the network
-    # (unspecified batchsize, 1 channel, 28 rows and 28 columns) and
-    # linking it to the given Theano variable `input_var`, if any:
+    # Input layer
     l_in = lasagne.layers.InputLayer(shape=(None, 1, INPUT_DIM, INPUT_DIM),
                                      input_var=input_var)
-
-    # Add a fully-connected layer of 800 units, using the linear rectifier, and
-    # initializing weights with Glorot's scheme (which is the default anyway):
-    l_hid1 = lasagne.layers.DenseLayer(
-            l_in, num_units=200,
+    # Hidden layers
+    for layer_size in layer_sizes:
+        current_hidden_layer = lasagne.layers.DenseLayer(
+            l_in, num_units=layer_size,
             nonlinearity=lasagne.nonlinearities.rectify,
             W=lasagne.init.GlorotUniform())
 
-    # Finally, we'll add the fully-connected output layer, of 10 softmax units:
-    l_out = lasagne.layers.DenseLayer(
-            l_hid1, num_units=4,
-            nonlinearity=lasagne.nonlinearities.tanh)
+    # Output layer
+    if loss_choice == "categorical_crossentropy":
+        l_out = lasagne.layers.DenseLayer(
+                current_hidden_layer, num_units=4,
+                nonlinearity=lasagne.nonlinearities.softmax)
+    elif loss_choice == "MSE":
+        l_out = lasagne.layers.DenseLayer(
+                current_hidden_layer, num_units=4,
+                nonlinearity=lasagne.nonlinearities.tanh)
 
-    # Each layer is linked to its incoming layer(s), so we only need to pass
-    # the output layer to give access to a network in Lasagne:
     return l_out
-
 
 def iterate_minibatches(inputs, targets, batchsize, shuffle=False):
     assert len(inputs) == len(targets)
@@ -127,17 +123,11 @@ elif loss_choice == "MSE":
 # Create neural network model (depending on first command line parameter)
 print("Building model and compiling functions...")
 if model == 'mlp':
-    network = build_mlp(input_var)
-all_layers = lasagne.layers.get_all_layers(network)
+    network = build_mlp(input_var, layer_sizes)
 
 # Create a loss expression for training, i.e., a scalar objective we want
 # to minimize (for our multi-class problem, it is the cross-entropy loss):
 prediction = lasagne.layers.get_output(network)
-
-#output = theano.function([input_var], prediction)
-#print(output(X_train[:1]))
-#np.shape(X_train[:1])
-
 
 if loss_choice == "categorical_crossentropy":
     # loss option 1: categorical crossentropy
@@ -173,12 +163,10 @@ if loss_choice == "MSE":
     test_loss = test_loss.mean()
 # As a bonus, also create an expression for the classification accuracy:
 test_acc = T.mean(T.eq(T.argmax(test_prediction, axis=1), target_var),
-                    dtype=theano.config.floatX)
+                  dtype=theano.config.floatX)
 if loss_choice == "MSE":
     test_acc = T.mean(T.eq(T.argmax(test_prediction, axis=1), T.argmax(target_var, axis=1)),
-                        dtype=theano.config.floatX)
-
-
+                      dtype=theano.config.floatX)
 
 
 # Compile a function performing a training step on a mini-batch (by giving
@@ -216,6 +204,8 @@ for epoch in range(num_epochs):
     print("Epoch {} of {} took {:.3f}s".format(
         epoch + 1, num_epochs, time.time() - start_time))
     print("  training loss:\t\t{:.6f}".format(train_err / train_batches))
+
+
     print("  validation loss:\t\t{:.6f}".format(val_err / val_batches))
     print("  validation accuracy:\t\t{:.2f} %".format(
         val_acc / val_batches * 100))
@@ -273,7 +263,7 @@ def plot_heatmaps(X, target, R_i, output_neuron):
 
 
 def compute_relevance(Input, target, network, output_neuron,  plot_heatmap=False,
-                      epsilon = .001):
+                      epsilon = .01):
     # --- get paramters and activations for the input ---
     all_params = lasagne.layers.get_all_params(network)
     W_mats = all_params[0::2]
