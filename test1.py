@@ -7,18 +7,20 @@ import matplotlib.pyplot as plt
 
 
 # parameters
-model = 'mlp'
-num_epochs = 50
-minibatch_size = 20
-noise_scale = .1
-loss_choice = "MSE"
-layer_sizes = [200, 400]
-# some global variables
-INPUT_DIM = 10
-# controlling the behavior of the program
-do_plotting = True
-output_neuron = 1 # for which output neuron to compute the relevance
-dataset = 402 # which dataset to use
+params = {}
+params["N_train"] = 500
+params["N_val"] = 200
+params["N_test"] = 200
+params["model"] = 'mlp'
+params["num_epochs"] = 50
+params["minibatch_size"] = 20
+params["noise_scale"] = .1
+params["loss_choice"] = "MSE"
+params["layer_sizes"] = [200, 400]
+params["INPUT_DIM"] = 10
+params["do_plotting"] = True
+params["output_neuron"] = 1 # for which output neuron to compute the relevance
+params["dataset"] = 402 # which dataset to use
 
 
 def get_target(target, loss_choice):
@@ -37,7 +39,7 @@ def get_category(target):
         # otherwise the target is already the category
         return target
 
-def create_N_examples(loss_choice, N=500, noise_scale=.1):
+def create_N_examples(params, N):
     pic = np.zeros((10, 10))
     pic[2:8, 2] = 1
     pic[2:8, 7] = 1
@@ -45,10 +47,12 @@ def create_N_examples(loss_choice, N=500, noise_scale=.1):
     pic[7, 2:8] = 1
     overall_idx = 0
     X = np.empty((N, 1, 10, 10))
-    if loss_choice == "categorical_crossentropy":
+    if params["loss_choice"] == "categorical_crossentropy":
         y = np.empty(N, dtype=np.int32)
-    elif loss_choice == "MSE":
+    elif params["loss_choice"] == "MSE":
         y = np.empty((N, 4), dtype=np.int32)
+    else:
+        raise("Unrecognized Loss choice")
     while overall_idx < N:
         for target in np.arange(4):
             current_pic = pic.copy()
@@ -60,43 +64,40 @@ def create_N_examples(loss_choice, N=500, noise_scale=.1):
                 current_pic[2, 2:8] = 0
             elif target == 3:
                 current_pic[7, 2:8] = 0
-            current_pic += (np.random.normal(size=(INPUT_DIM, INPUT_DIM))*noise_scale -1) *2
+            current_pic += (np.random.normal(size=(params["INPUT_DIM"], params["INPUT_DIM"]))*params["noise_scale"] -1) *2
             X[overall_idx, 0, :, :] = current_pic
-            y[overall_idx] = get_target(target, loss_choice)
+            y[overall_idx] = get_target(target, params["loss_choice"])
             overall_idx += 1
     return X, y
 
 
-def load_dataset(loss_choice, noise_scale=.6):
-    X_train, y_train = create_N_examples(loss_choice, 500, noise_scale)
-    X_val, y_val = create_N_examples(loss_choice, 100, noise_scale)
-    X_test, y_test = create_N_examples(loss_choice, 100, noise_scale)
+def load_dataset(params):
+    X_train, y_train = create_N_examples(params, params["N_train"])
+    X_val, y_val = create_N_examples(params, params["N_val"])
+    X_test, y_test = create_N_examples(params, params["N_test"])
     return X_train, y_train, X_val, y_val, X_test, y_test
 
 
-def build_mlp(input_var=None, layer_sizes=[200], loss_choice="categorical_crossentropy"):
-    ## Later I could still add the option to have different nonlinearities
-
+def build_mlp(params, input_var=None):
     # Input layer
-    l_in = lasagne.layers.InputLayer(shape=(None, 1, INPUT_DIM, INPUT_DIM),
+    l_in = lasagne.layers.InputLayer(shape=(None, 1, params["INPUT_DIM"], params["INPUT_DIM"]),
                                      input_var=input_var)
     # Hidden layers
-    for layer_size in layer_sizes:
+    for layer_size in params["layer_sizes"]:
         current_hidden_layer = lasagne.layers.DenseLayer(
             l_in, num_units=layer_size,
             nonlinearity=lasagne.nonlinearities.rectify,
             W=lasagne.init.GlorotUniform())
 
     # Output layer
-    if loss_choice == "categorical_crossentropy":
+    if params["loss_choice"] == "categorical_crossentropy":
         l_out = lasagne.layers.DenseLayer(
                 current_hidden_layer, num_units=4,
                 nonlinearity=lasagne.nonlinearities.softmax)
-    elif loss_choice == "MSE":
+    elif params["loss_choice"] == "MSE":
         l_out = lasagne.layers.DenseLayer(
                 current_hidden_layer, num_units=4,
                 nonlinearity=lasagne.nonlinearities.tanh)
-
     return l_out
 
 def iterate_minibatches(inputs, targets, batchsize, shuffle=False):
@@ -114,64 +115,87 @@ def iterate_minibatches(inputs, targets, batchsize, shuffle=False):
 
 # Load the dataset
 print("Loading data...")
-X_train, y_train, X_val, y_val, X_test, y_test = load_dataset(loss_choice,
-                                                              noise_scale)
+X_train, y_train, X_val, y_val, X_test, y_test = load_dataset(params)
 
-# Prepare Theano variables for inputs and targets
-input_var = T.tensor4('inputs')
-if loss_choice == "categorical_crossentropy":
+if params["loss_choice"] == "categorical_crossentropy":
+    # Prepare Theano variables for inputs and targets
+    input_var = T.tensor4('inputs')
     target_var = T.ivector('targets')
-elif loss_choice == "MSE":
-    target_var = T.dmatrix('targets')
 
-# Create neural network model (depending on first command line parameter)
-print("Building model and compiling functions...")
-if model == 'mlp':
-    network = build_mlp(input_var, layer_sizes)
+    # Create neural network model (depending on first command line parameter)
+    print("Building model and compiling functions...")
+    if params["model"] == 'mlp':
+        network = build_mlp(params, input_var)
 
-# Create a loss expression for training, i.e., a scalar objective we want
-# to minimize (for our multi-class problem, it is the cross-entropy loss):
-prediction = lasagne.layers.get_output(network)
+    # Create a loss expression for training, i.e., a scalar objective we want
+    # to minimize (for our multi-class problem, it is the cross-entropy loss):
+    prediction = lasagne.layers.get_output(network)
 
-if loss_choice == "categorical_crossentropy":
     # loss option 1: categorical crossentropy
     loss = lasagne.objectives.categorical_crossentropy(prediction, target_var)
     loss = loss.mean()
-elif loss_choice == "MSE":
+
+
+    # We could add some weight decay as well here, see lasagne.regularization.
+
+    # Create update expressions for training, i.e., how to modify the
+    # parameters at each training step. Here, we'll use Stochastic Gradient
+    # Descent (SGD) with Nesterov momentum, but Lasagne offers plenty more.
+    network_params = lasagne.layers.get_all_params(network, trainable=True)
+    updates = lasagne.updates.nesterov_momentum(
+            loss, network_params, learning_rate=0.01, momentum=0.9)
+
+    # Create a loss expression for validation/testing. The crucial difference
+    # here is that we do a deterministic forward pass through the network,
+    # disabling dropout layers.
+    test_prediction = lasagne.layers.get_output(network, deterministic=True)
+    test_loss = lasagne.objectives.categorical_crossentropy(test_prediction,
+                                                            target_var)
+    test_loss = test_loss.mean()
+
+    # As a bonus, also create an expression for the classification accuracy:
+    test_acc = T.mean(T.eq(T.argmax(test_prediction, axis=1), target_var),
+                    dtype=theano.config.floatX)
+
+
+if params["loss_choice"] == "MSE":
+    # Prepare Theano variables for inputs and targets
+    input_var = T.tensor4('inputs')
+    target_var = T.dmatrix('targets')
+
+    # Create neural network model (depending on first command line parameter)
+    print("Building model and compiling functions...")
+    if params["model"] == 'mlp':
+        network = build_mlp(params, input_var)
+
+    # Create a loss expression for training, i.e., a scalar objective we want
+    # to minimize (for our multi-class problem, it is the cross-entropy loss):
+    prediction = lasagne.layers.get_output(network)
+
     # loss option 2: MSE with {-1,1} targets
     loss = lasagne.objectives.squared_error(prediction, target_var)
     loss = loss.mean()
-    ## PROBABLY HAVE TO ADD loss = loss.mean() HERE!
 
 
-# We could add some weight decay as well here, see lasagne.regularization.
+    # We could add some weight decay as well here, see lasagne.regularization.
 
-# Create update expressions for training, i.e., how to modify the
-# parameters at each training step. Here, we'll use Stochastic Gradient
-# Descent (SGD) with Nesterov momentum, but Lasagne offers plenty more.
-params = lasagne.layers.get_all_params(network, trainable=True)
-updates = lasagne.updates.nesterov_momentum(
-        loss, params, learning_rate=0.01, momentum=0.9)
+    # Create update expressions for training, i.e., how to modify the
+    # parameters at each training step. Here, we'll use Stochastic Gradient
+    # Descent (SGD) with Nesterov momentum, but Lasagne offers plenty more.
+    network_params = lasagne.layers.get_all_params(network, trainable=True)
+    updates = lasagne.updates.nesterov_momentum(
+            loss, network_params, learning_rate=0.01, momentum=0.9)
 
-# Create a loss expression for validation/testing. The crucial difference
-# here is that we do a deterministic forward pass through the network,
-# disabling dropout layers.
-test_prediction = lasagne.layers.get_output(network, deterministic=True)
-test_loss = lasagne.objectives.categorical_crossentropy(test_prediction,
-                                                        target_var)
-test_loss = test_loss.mean()
-
-if loss_choice == "MSE":
+    # Create a loss expression for validation/testing. The crucial difference
+    # here is that we do a deterministic forward pass through the network,
+    # disabling dropout layers.
+    test_prediction = lasagne.layers.get_output(network, deterministic=True)
     test_loss = lasagne.objectives.squared_error(test_prediction,
-                                                 target_var)
+                                                    target_var)
     test_loss = test_loss.mean()
-# As a bonus, also create an expression for the classification accuracy:
-test_acc = T.mean(T.eq(T.argmax(test_prediction, axis=1), target_var),
-                  dtype=theano.config.floatX)
-if loss_choice == "MSE":
-    test_acc = T.mean(T.eq(T.argmax(test_prediction, axis=1), T.argmax(target_var, axis=1)),
-                      dtype=theano.config.floatX)
 
+    test_acc = T.mean(T.eq(T.argmax(test_prediction, axis=1), T.argmax(target_var, axis=1)),
+                    dtype=theano.config.floatX)
 
 # Compile a function performing a training step on a mini-batch (by giving
 # the updates dictionary) and returning the corresponding training loss:
@@ -183,12 +207,12 @@ val_fn = theano.function([input_var, target_var], [test_loss, test_acc])
 # Finally, launch the training loop.
 print("Starting training...")
 # We iterate over epochs:
-for epoch in range(num_epochs):
+for epoch in range(params["num_epochs"]):
     # In each epoch, we do a full pass over the training data:
     train_err = 0
     train_batches = 0
     start_time = time.time()
-    for batch in iterate_minibatches(X_train, y_train, minibatch_size, shuffle=True):
+    for batch in iterate_minibatches(X_train, y_train, params["minibatch_size"], shuffle=True):
         inputs, targets = batch
         train_err += train_fn(inputs, targets)
         train_batches += 1
@@ -197,7 +221,7 @@ for epoch in range(num_epochs):
     val_err = 0
     val_acc = 0
     val_batches = 0
-    for batch in iterate_minibatches(X_val, y_val, minibatch_size, shuffle=False):
+    for batch in iterate_minibatches(X_val, y_val, params["minibatch_size"], shuffle=False):
         inputs, targets = batch
         err, acc = val_fn(inputs, targets)
         val_err += err
@@ -206,7 +230,7 @@ for epoch in range(num_epochs):
 
     # Then we print the results for this epoch:
     print("Epoch {} of {} took {:.3f}s".format(
-        epoch + 1, num_epochs, time.time() - start_time))
+        epoch + 1, params["num_epochs"], time.time() - start_time))
     print("  training loss:\t\t{:.6f}".format(train_err / train_batches))
 
 
@@ -218,7 +242,7 @@ for epoch in range(num_epochs):
 test_err = 0
 test_acc = 0
 test_batches = 0
-for batch in iterate_minibatches(X_test, y_test, minibatch_size, shuffle=False):
+for batch in iterate_minibatches(X_test, y_test, params["minibatch_size"], shuffle=False):
     inputs, targets = batch
     err, acc = val_fn(inputs, targets)
     test_err += err
@@ -256,13 +280,13 @@ def plot_heatmap(R_i, output_neuron, axis=None, title=""):
     if axis == None:
         fig, axis = plt.subplots(1, 2, figsize=(15, 10))
 
-    plot = axis.pcolor(R_i)
+    plot = axis.pcolor(R_i, cmap="viridis")
     axis.set_title(title)
     axis.invert_yaxis()
     plt.colorbar(plot, ax=axis)
 
 
-def compute_relevance(Input, target, network, output_neuron, epsilon = .01):
+def compute_relevance(Input, network, output_neuron, epsilon = .01):
     # --- get paramters and activations for the input ---
     all_params = lasagne.layers.get_all_params(network)
     W_mats = all_params[0::2]
@@ -301,19 +325,14 @@ def compute_relevance(Input, target, network, output_neuron, epsilon = .01):
 
     return R
 
-#R = compute_relevance(np.ones((10,10)), "ones", network, output_neuron, plot_heatmap=do_plotting)
 
-R_list = []
 fig, axes = plt.subplots(1, 5, figsize=(15, 10))
 # first plotting the input image
 title = "Input image"
-plot_heatmap(X_train[dataset][0], y_train[dataset], axis=axes[0], title=title)
+plot_heatmap(X_train[params["dataset"]][0], y_train[params["dataset"]], axis=axes[0], title=title)
 for output_neuron in np.arange(4):
     title = "Relevance for target " + get_target_title(output_neuron)
-    R = compute_relevance(X_train[dataset][0], y_train[dataset], network,
-                          output_neuron)
+    R = compute_relevance(X_train[params["dataset"]][0], network, output_neuron)
     plot_heatmap(R, output_neuron, axes[output_neuron+1], title)
-
-if do_plotting:
+if params["do_plotting"]:
     plt.show()
-
