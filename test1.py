@@ -8,15 +8,17 @@ import matplotlib.pyplot as plt
 
 # parameters
 model = 'mlp'
-num_epochs = 5
+num_epochs = 50
 minibatch_size = 20
-noise_scale = .3
-loss_choice = "categorical_crossentropy"
-layer_sizes = [200, 400, 300, 200]
+noise_scale = .1
+loss_choice = "MSE"
+layer_sizes = [200, 400]
 # some global variables
 INPUT_DIM = 10
-# controlling the behavior
+# controlling the behavior of the program
 do_plotting = True
+output_neuron = 1 # for which output neuron to compute the relevance
+dataset = 402 # which dataset to use
 
 
 def get_target(target, loss_choice):
@@ -27,11 +29,13 @@ def get_target(target, loss_choice):
         target_vec[target] = 1
         return target_vec
 
-def get_category(target, loss_choice):
-    if loss_choice == "categorical_crossentropy":
-        return target
-    elif loss_choice == "MSE":
+def get_category(target):
+    try:
+        # if the target is a one-hot vector, return argmax
         return np.argmax(target)
+    except TypeError:
+        # otherwise the target is already the category
+        return target
 
 def create_N_examples(loss_choice, N=500, noise_scale=.1):
     pic = np.zeros((10, 10))
@@ -56,7 +60,7 @@ def create_N_examples(loss_choice, N=500, noise_scale=.1):
                 current_pic[2, 2:8] = 0
             elif target == 3:
                 current_pic[7, 2:8] = 0
-            current_pic += np.random.normal(size=(INPUT_DIM, INPUT_DIM))*noise_scale
+            current_pic += (np.random.normal(size=(INPUT_DIM, INPUT_DIM))*noise_scale -1) *2
             X[overall_idx, 0, :, :] = current_pic
             y[overall_idx] = get_target(target, loss_choice)
             overall_idx += 1
@@ -234,6 +238,7 @@ def softmax(x):
 
 
 def get_target_title(target):
+    target = get_category(target)
     if target == 0:
         target_title = "left open"
     elif target == 1:
@@ -247,23 +252,17 @@ def get_target_title(target):
     return target_title
 
 
-def plot_heatmaps(X, target, R_i, output_neuron):
-    input_target_title = get_target_title(target)
-    relevance_target_title = get_target_title(output_neuron)
+def plot_heatmap(R_i, output_neuron, axis=None, title=""):
+    if axis == None:
+        fig, axis = plt.subplots(1, 2, figsize=(15, 10))
 
-    fig, axes = plt.subplots(1, 2, figsize=(15, 10))
-    plot1 = axes[0].pcolor(X)
-    plt.colorbar(plot1, ax=axes[0])
-    axes[0].invert_yaxis()
-    axes[0].set_title("Input image with " + input_target_title)
-    plot2 = axes[1].pcolor(R_i)
-    axes[1].set_title("Relevance for output neuron " + relevance_target_title)
-    axes[1].invert_yaxis()
-    plt.colorbar(plot2, ax=axes[1])
+    plot = axis.pcolor(R_i)
+    axis.set_title(title)
+    axis.invert_yaxis()
+    plt.colorbar(plot, ax=axis)
 
 
-def compute_relevance(Input, target, network, output_neuron,  plot_heatmap=False,
-                      epsilon = .01):
+def compute_relevance(Input, target, network, output_neuron, epsilon = .01):
     # --- get paramters and activations for the input ---
     all_params = lasagne.layers.get_all_params(network)
     W_mats = all_params[0::2]
@@ -300,13 +299,21 @@ def compute_relevance(Input, target, network, output_neuron,  plot_heatmap=False
         R = np.sum(np.multiply(Z_ij.T, R_over_z), axis=1)
     R = R.reshape((10, 10))
 
-    if plot_heatmap:
-        plot_heatmaps(Input, get_category(target, loss_choice), R, output_neuron)
     return R
 
-output_neuron = 2
-dataset = 402
-R = compute_relevance(X_train[dataset][0], y_train[dataset], network, output_neuron, plot_heatmap=do_plotting)
-R = compute_relevance(np.ones((10,10)), "ones", network, output_neuron, plot_heatmap=do_plotting)
+#R = compute_relevance(np.ones((10,10)), "ones", network, output_neuron, plot_heatmap=do_plotting)
+
+R_list = []
+fig, axes = plt.subplots(1, 5, figsize=(15, 10))
+# first plotting the input image
+title = "Input image"
+plot_heatmap(X_train[dataset][0], y_train[dataset], axis=axes[0], title=title)
+for output_neuron in np.arange(4):
+    title = "Relevance for target " + get_target_title(output_neuron)
+    R = compute_relevance(X_train[dataset][0], y_train[dataset], network,
+                          output_neuron)
+    plot_heatmap(R, output_neuron, axes[output_neuron+1], title)
+
 if do_plotting:
     plt.show()
+
