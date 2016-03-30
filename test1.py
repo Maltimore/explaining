@@ -1,27 +1,36 @@
 import time
+import sys
 import numpy as np
 import theano
 import theano.tensor as T
 import lasagne
 import matplotlib.pyplot as plt
+import argparse
 
-
+# command line interface
+parser = argparse.ArgumentParser(description='Process some integers.')
+parser.add_argument("-l", "--loss_choice", default="MSE")
+parser.add_argument("-n", "--noise_scale", default=0.1)
+parser.add_argument("-m", "--model", default="mlp")
+parser.add_argument("--layer_sizes", default=[200, 200])
+if __name__ == "__main__" and "-f" not in sys.argv:
+    params = vars(parser.parse_args())
+sys.argv
+locals()
+'-f' in locals()
 # parameters
-params = {}
+if not 'params' in locals():
+    params = vars(parser.parse_args(''))
 params["N_train"] = 500
 params["N_val"] = 200
 params["N_test"] = 200
-params["model"] = 'mlp'
 params["num_epochs"] = 50
 params["minibatch_size"] = 20
 params["noise_scale"] = .1
-params["loss_choice"] = "MSE"
-params["layer_sizes"] = [200, 400]
 params["INPUT_DIM"] = 10
-params["do_plotting"] = True
+params["do_plotting"] = False
 params["output_neuron"] = 1 # for which output neuron to compute the relevance
 params["dataset"] = 402 # which dataset to use
-
 
 def get_target(target, loss_choice):
     if loss_choice == "categorical_crossentropy":
@@ -68,6 +77,8 @@ def create_N_examples(params, N):
             X[overall_idx, 0, :, :] = current_pic
             y[overall_idx] = get_target(target, params["loss_choice"])
             overall_idx += 1
+        if overall_idx >= N:
+            break
     return X, y
 
 
@@ -122,21 +133,14 @@ if params["loss_choice"] == "categorical_crossentropy":
     input_var = T.tensor4('inputs')
     target_var = T.ivector('targets')
 
-    # Create neural network model (depending on first command line parameter)
     print("Building model and compiling functions...")
     if params["model"] == 'mlp':
         network = build_mlp(params, input_var)
 
-    # Create a loss expression for training, i.e., a scalar objective we want
-    # to minimize (for our multi-class problem, it is the cross-entropy loss):
     prediction = lasagne.layers.get_output(network)
 
-    # loss option 1: categorical crossentropy
     loss = lasagne.objectives.categorical_crossentropy(prediction, target_var)
     loss = loss.mean()
-
-
-    # We could add some weight decay as well here, see lasagne.regularization.
 
     # Create update expressions for training, i.e., how to modify the
     # parameters at each training step. Here, we'll use Stochastic Gradient
@@ -157,27 +161,19 @@ if params["loss_choice"] == "categorical_crossentropy":
     test_acc = T.mean(T.eq(T.argmax(test_prediction, axis=1), target_var),
                     dtype=theano.config.floatX)
 
-
 if params["loss_choice"] == "MSE":
     # Prepare Theano variables for inputs and targets
     input_var = T.tensor4('inputs')
     target_var = T.dmatrix('targets')
 
-    # Create neural network model (depending on first command line parameter)
     print("Building model and compiling functions...")
     if params["model"] == 'mlp':
         network = build_mlp(params, input_var)
 
-    # Create a loss expression for training, i.e., a scalar objective we want
-    # to minimize (for our multi-class problem, it is the cross-entropy loss):
     prediction = lasagne.layers.get_output(network)
 
-    # loss option 2: MSE with {-1,1} targets
     loss = lasagne.objectives.squared_error(prediction, target_var)
     loss = loss.mean()
-
-
-    # We could add some weight decay as well here, see lasagne.regularization.
 
     # Create update expressions for training, i.e., how to modify the
     # parameters at each training step. Here, we'll use Stochastic Gradient
@@ -336,3 +332,10 @@ for output_neuron in np.arange(4):
     plot_heatmap(R, output_neuron, axes[output_neuron+1], title)
 if params["do_plotting"]:
     plt.show()
+
+
+
+get_activations = theano.function([input_var],
+            lasagne.layers.get_output(lasagne.layers.get_all_layers(network)))
+activations = get_activations(np.expand_dims(np.expand_dims(np.ones((10,10)), axis=0), axis=0))
+activations[-1]
