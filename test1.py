@@ -32,7 +32,7 @@ params["minibatch_size"] = 20
 params["noise_scale"] = .1
 params["INPUT_DIM"] = 10
 params["output_neuron"] = 1 # for which output neuron to compute the relevance
-params["dataset"] = 402 # which dataset to use
+params["dataset"] = 2 # which dataset to use
 
 def get_target(target, loss_choice):
     if loss_choice == "categorical_crossentropy":
@@ -126,134 +126,142 @@ def iterate_minibatches(inputs, targets, batchsize, shuffle=False):
         yield inputs[excerpt], targets[excerpt]
 
 
-# Load the dataset
-print("Loading data...")
-X_train, y_train, X_val, y_val, X_test, y_test = load_dataset(params)
+def train_network(params):
+    # Load the dataset
+    print("Loading data...")
+    X_train, y_train, X_val, y_val, X_test, y_test = load_dataset(params)
 
-if params["loss_choice"] == "categorical_crossentropy":
-    # Prepare Theano variables for inputs and targets
-    input_var = T.tensor4('inputs')
-    target_var = T.ivector('targets')
 
-    print("Building model and compiling functions...")
-    if params["model"] == 'mlp':
-        network = build_mlp(params, input_var)
+    if params["loss_choice"] == "categorical_crossentropy":
+        # Prepare Theano variables for inputs and targets
+        input_var = T.tensor4('inputs')
+        target_var = T.ivector('targets')
 
-    prediction = lasagne.layers.get_output(network)
+        print("Building model and compiling functions...")
+        if params["model"] == 'mlp':
+            network = build_mlp(params, input_var)
 
-    loss = lasagne.objectives.categorical_crossentropy(prediction, target_var)
-    loss = loss.mean()
+        prediction = lasagne.layers.get_output(network)
 
-    # Create update expressions for training, i.e., how to modify the
-    # parameters at each training step. Here, we'll use Stochastic Gradient
-    # Descent (SGD) with Nesterov momentum, but Lasagne offers plenty more.
-    network_params = lasagne.layers.get_all_params(network, trainable=True)
-    updates = lasagne.updates.nesterov_momentum(
-            loss, network_params, learning_rate=0.01, momentum=0.9)
+        loss = lasagne.objectives.categorical_crossentropy(prediction, target_var)
+        loss = loss.mean()
 
-    # Create a loss expression for validation/testing. The crucial difference
-    # here is that we do a deterministic forward pass through the network,
-    # disabling dropout layers.
-    test_prediction = lasagne.layers.get_output(network, deterministic=True)
-    test_loss = lasagne.objectives.categorical_crossentropy(test_prediction,
-                                                            target_var)
-    test_loss = test_loss.mean()
+        # Create update expressions for training, i.e., how to modify the
+        # parameters at each training step. Here, we'll use Stochastic Gradient
+        # Descent (SGD) with Nesterov momentum, but Lasagne offers plenty more.
+        network_params = lasagne.layers.get_all_params(network, trainable=True)
+        updates = lasagne.updates.nesterov_momentum(
+                loss, network_params, learning_rate=0.01, momentum=0.9)
 
-    # As a bonus, also create an expression for the classification accuracy:
-    test_acc = T.mean(T.eq(T.argmax(test_prediction, axis=1), target_var),
-                    dtype=theano.config.floatX)
+        # Create a loss expression for validation/testing. The crucial difference
+        # here is that we do a deterministic forward pass through the network,
+        # disabling dropout layers.
+        test_prediction = lasagne.layers.get_output(network, deterministic=True)
+        test_loss = lasagne.objectives.categorical_crossentropy(test_prediction,
+                                                                target_var)
+        test_loss = test_loss.mean()
 
-if params["loss_choice"] == "MSE":
-    # Prepare Theano variables for inputs and targets
-    input_var = T.tensor4('inputs')
-    target_var = T.dmatrix('targets')
+        # As a bonus, also create an expression for the classification accuracy:
+        test_acc = T.mean(T.eq(T.argmax(test_prediction, axis=1), target_var),
+                        dtype=theano.config.floatX)
 
-    print("Building model and compiling functions...")
-    if params["model"] == 'mlp':
-        network = build_mlp(params, input_var)
+    if params["loss_choice"] == "MSE":
+        # Prepare Theano variables for inputs and targets
+        input_var = T.tensor4('inputs')
+        target_var = T.dmatrix('targets')
 
-    prediction = lasagne.layers.get_output(network)
+        print("Building model and compiling functions...")
+        if params["model"] == 'mlp':
+            network = build_mlp(params, input_var)
 
-    loss = lasagne.objectives.squared_error(prediction, target_var)
-    loss = loss.mean()
+        prediction = lasagne.layers.get_output(network)
 
-    # Create update expressions for training, i.e., how to modify the
-    # parameters at each training step. Here, we'll use Stochastic Gradient
-    # Descent (SGD) with Nesterov momentum, but Lasagne offers plenty more.
-    network_params = lasagne.layers.get_all_params(network, trainable=True)
-    updates = lasagne.updates.nesterov_momentum(
-            loss, network_params, learning_rate=0.01, momentum=0.9)
+        loss = lasagne.objectives.squared_error(prediction, target_var)
+        loss = loss.mean()
 
-    # Create a loss expression for validation/testing. The crucial difference
-    # here is that we do a deterministic forward pass through the network,
-    # disabling dropout layers.
-    test_prediction = lasagne.layers.get_output(network, deterministic=True)
-    test_loss = lasagne.objectives.squared_error(test_prediction,
-                                                    target_var)
-    test_loss = test_loss.mean()
+        # Create update expressions for training, i.e., how to modify the
+        # parameters at each training step. Here, we'll use Stochastic Gradient
+        # Descent (SGD) with Nesterov momentum, but Lasagne offers plenty more.
+        network_params = lasagne.layers.get_all_params(network, trainable=True)
+        updates = lasagne.updates.nesterov_momentum(
+                loss, network_params, learning_rate=0.01, momentum=0.9)
 
-    test_acc = T.mean(T.eq(T.argmax(test_prediction, axis=1), T.argmax(target_var, axis=1)),
-                    dtype=theano.config.floatX)
+        # Create a loss expression for validation/testing. The crucial difference
+        # here is that we do a deterministic forward pass through the network,
+        # disabling dropout layers.
+        test_prediction = lasagne.layers.get_output(network, deterministic=True)
+        test_loss = lasagne.objectives.squared_error(test_prediction,
+                                                        target_var)
+        test_loss = test_loss.mean()
 
-# Compile a function performing a training step on a mini-batch (by giving
-# the updates dictionary) and returning the corresponding training loss:
-train_fn = theano.function([input_var, target_var], loss, updates=updates)
+        test_acc = T.mean(T.eq(T.argmax(test_prediction, axis=1), T.argmax(target_var, axis=1)),
+                        dtype=theano.config.floatX)
 
-# Compile a second function computing the validation loss and accuracy:
-val_fn = theano.function([input_var, target_var], [test_loss, test_acc])
+    params["input_var"] = input_var
+    params["target_var"] = target_var
 
-# Finally, launch the training loop.
-print("Starting training...")
-# We iterate over epochs:
-for epoch in range(params["num_epochs"]):
-    # In each epoch, we do a full pass over the training data:
-    train_err = 0
-    train_batches = 0
-    start_time = time.time()
-    for batch in iterate_minibatches(X_train, y_train, params["minibatch_size"], shuffle=True):
-        inputs, targets = batch
-        train_err += train_fn(inputs, targets)
-        train_batches += 1
+    # Compile a function performing a training step on a mini-batch (by giving
+    # the updates dictionary) and returning the corresponding training loss:
+    train_fn = theano.function([input_var, target_var], loss, updates=updates)
 
-    # And a full pass over the validation data:
-    val_err = 0
-    val_acc = 0
-    val_batches = 0
-    for batch in iterate_minibatches(X_val, y_val, params["minibatch_size"], shuffle=False):
+    # Compile a second function computing the validation loss and accuracy:
+    val_fn = theano.function([input_var, target_var], [test_loss, test_acc])
+
+    # Finally, launch the training loop.
+    print("Starting training...")
+    # We iterate over epochs:
+    for epoch in range(params["num_epochs"]):
+        # In each epoch, we do a full pass over the training data:
+        train_err = 0
+        train_batches = 0
+        start_time = time.time()
+        for batch in iterate_minibatches(X_train, y_train, params["minibatch_size"], shuffle=True):
+            inputs, targets = batch
+            train_err += train_fn(inputs, targets)
+            train_batches += 1
+
+        # And a full pass over the validation data:
+        val_err = 0
+        val_acc = 0
+        val_batches = 0
+        for batch in iterate_minibatches(X_val, y_val, params["minibatch_size"], shuffle=False):
+            inputs, targets = batch
+            err, acc = val_fn(inputs, targets)
+            val_err += err
+            val_acc += acc
+            val_batches += 1
+
+        if params["verbose"]:
+            # Then we print the results for this epoch:
+            print("Epoch {} of {} took {:.3f}s".format(
+                epoch + 1, params["num_epochs"], time.time() - start_time))
+            print("  training loss:\t\t{:.6f}".format(train_err / train_batches))
+
+
+            print("  validation loss:\t\t{:.6f}".format(val_err / val_batches))
+            print("  validation accuracy:\t\t{:.2f} %".format(
+                val_acc / val_batches * 100))
+
+    # After training, we compute and print the test error:
+    test_err = 0
+    test_acc = 0
+    test_batches = 0
+    for batch in iterate_minibatches(X_test, y_test, params["minibatch_size"], shuffle=False):
         inputs, targets = batch
         err, acc = val_fn(inputs, targets)
-        val_err += err
-        val_acc += acc
-        val_batches += 1
-
-    if params["verbose"]:
-        # Then we print the results for this epoch:
-        print("Epoch {} of {} took {:.3f}s".format(
-            epoch + 1, params["num_epochs"], time.time() - start_time))
-        print("  training loss:\t\t{:.6f}".format(train_err / train_batches))
-
-
-        print("  validation loss:\t\t{:.6f}".format(val_err / val_batches))
-        print("  validation accuracy:\t\t{:.2f} %".format(
-            val_acc / val_batches * 100))
-
-# After training, we compute and print the test error:
-test_err = 0
-test_acc = 0
-test_batches = 0
-for batch in iterate_minibatches(X_test, y_test, params["minibatch_size"], shuffle=False):
-    inputs, targets = batch
-    err, acc = val_fn(inputs, targets)
-    test_err += err
-    test_acc += acc
-    test_batches += 1
-print(test_batches)
-print("Final results:")
-print("  test loss:\t\t\t{:.6f}".format(test_err / test_batches))
-print("  test accuracy:\t\t{:.2f} %".format(
-    test_acc / test_batches * 100))
+        test_err += err
+        test_acc += acc
+        test_batches += 1
+    print(test_batches)
+    print("Final results:")
+    print("  test loss:\t\t\t{:.6f}".format(test_err / test_batches))
+    print("  test accuracy:\t\t{:.2f} %".format(
+        test_acc / test_batches * 100))
+    return network, params
 
 
+
+network, params = train_network(params)
 # ------------------------------------------------------------------------------
 # Relevance backpropagation
 def softmax(x):
@@ -285,12 +293,14 @@ def plot_heatmap(R_i, output_neuron, axis=None, title=""):
     plt.colorbar(plot, ax=axis)
 
 
-def compute_relevance(Input, network, output_neuron, epsilon = .01):
+def compute_relevance(Input, network, output_neuron, params, epsilon = .01):
+
     # --- get paramters and activations for the input ---
     all_params = lasagne.layers.get_all_params(network)
     W_mats = all_params[0::2]
     biases = all_params[1::2]
-    get_activations = theano.function([input_var],
+
+    get_activations = theano.function([params["input_var"]],
                 lasagne.layers.get_output(lasagne.layers.get_all_layers(network)))
     activations = get_activations(np.expand_dims(np.expand_dims(Input, axis=0), axis=0))
     # loop over W_mats, biases and activations to extract values and
@@ -325,21 +335,17 @@ def compute_relevance(Input, network, output_neuron, epsilon = .01):
     return R
 
 
+
+# create another example
+X, y = create_N_examples(params, 4)
+
 fig, axes = plt.subplots(1, 5, figsize=(15, 10))
 # first plotting the input image
 title = "Input image"
-plot_heatmap(X_train[params["dataset"]][0], y_train[params["dataset"]], axis=axes[0], title=title)
+plot_heatmap(X[params["dataset"]][0], y[params["dataset"]], axis=axes[0], title=title)
 for output_neuron in np.arange(4):
     title = "Relevance for target " + get_target_title(output_neuron)
-    R = compute_relevance(X_train[params["dataset"]][0], network, output_neuron)
+    R = compute_relevance(X[params["dataset"]][0], network, output_neuron, params)
     plot_heatmap(R, output_neuron, axes[output_neuron+1], title)
 if params["do_plotting"]:
     plt.show()
-params["do_plotting"]
-
-
-
-get_activations = theano.function([input_var],
-            lasagne.layers.get_output(lasagne.layers.get_all_layers(network)))
-activations = get_activations(np.expand_dims(np.expand_dims(np.ones((10,10)), axis=0), axis=0))
-activations[-1]
