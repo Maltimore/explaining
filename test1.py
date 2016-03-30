@@ -7,32 +7,31 @@ import lasagne
 import matplotlib.pyplot as plt
 import argparse
 
-# command line interface
-parser = argparse.ArgumentParser(description='Process some integers.')
-parser.add_argument("-l", "--loss_choice", default="MSE")
-parser.add_argument("-n", "--noise_scale", default=0.1)
-parser.add_argument("-m", "--model", default="mlp")
-parser.add_argument("--layer_sizes", default=[200, 200])
-parser.add_argument("-p", "--do_plotting", default=True)
-parser.add_argument("--verbose", default=False)
 
-if __name__ == "__main__" and "-f" not in sys.argv:
-    params = vars(parser.parse_args())
-sys.argv
-locals()
-'-f' in locals()
-# parameters
-if not 'params' in locals():
-    params = vars(parser.parse_args(''))
-params["N_train"] = 500
-params["N_val"] = 200
-params["N_test"] = 200
-params["num_epochs"] = 50
-params["minibatch_size"] = 20
-params["noise_scale"] = .1
-params["INPUT_DIM"] = 10
-params["output_neuron"] = 1 # for which output neuron to compute the relevance
-params["dataset"] = 2 # which dataset to use
+def get_parameters(argv):
+    # command line interface
+    parser = argparse.ArgumentParser(description='Process some integers.')
+    parser.add_argument("-l", "--loss_choice", default="MSE")
+    parser.add_argument("-n", "--noise_scale", default=0.1)
+    parser.add_argument("-e", "--epochs", default=50)
+    parser.add_argument("-m", "--model", default="mlp")
+    parser.add_argument("--layer_sizes", default=[200, 200])
+    parser.add_argument("-p", "--do_plotting", default=True)
+    parser.add_argument("--verbose", default=False)
+
+    params = vars(parser.parse_args(argv))
+    params["N_train"] = 500
+    params["N_val"] = 200
+    params["N_test"] = 200
+    params["num_epochs"] = 50
+    params["minibatch_size"] = 20
+    params["noise_scale"] = .1
+    params["INPUT_DIM"] = 10
+    params["output_neuron"] = 1 # for which output neuron to compute the relevance
+    params["dataset"] = 2 # which dataset to use
+
+    return params
+
 
 def get_target(target, loss_choice):
     if loss_choice == "categorical_crossentropy":
@@ -52,10 +51,10 @@ def get_category(target):
 
 def create_N_examples(params, N):
     pic = np.zeros((10, 10))
-    pic[2:8, 2] = 1
-    pic[2:8, 7] = 1
-    pic[2, 2:8] = 1
-    pic[7, 2:8] = 1
+    pic[3:7, 2] = 1
+    pic[3:7, 7] = 1
+    pic[2, 3:7] = 1
+    pic[7, 3:7] = 1
     overall_idx = 0
     X = np.empty((N, 1, 10, 10))
     if params["loss_choice"] == "categorical_crossentropy":
@@ -82,13 +81,6 @@ def create_N_examples(params, N):
         if overall_idx >= N:
             break
     return X, y
-
-
-def load_dataset(params):
-    X_train, y_train = create_N_examples(params, params["N_train"])
-    X_val, y_val = create_N_examples(params, params["N_val"])
-    X_test, y_test = create_N_examples(params, params["N_test"])
-    return X_train, y_train, X_val, y_val, X_test, y_test
 
 
 def build_mlp(params, input_var=None):
@@ -127,10 +119,10 @@ def iterate_minibatches(inputs, targets, batchsize, shuffle=False):
 
 
 def train_network(params):
-    # Load the dataset
-    print("Loading data...")
-    X_train, y_train, X_val, y_val, X_test, y_test = load_dataset(params)
 
+    X_train, y_train = create_N_examples(params, params["N_train"])
+    X_val, y_val = create_N_examples(params, params["N_val"])
+    X_test, y_test = create_N_examples(params, params["N_test"])
 
     if params["loss_choice"] == "categorical_crossentropy":
         # Prepare Theano variables for inputs and targets
@@ -260,10 +252,6 @@ def train_network(params):
     return network, params
 
 
-
-network, params = train_network(params)
-# ------------------------------------------------------------------------------
-# Relevance backpropagation
 def softmax(x):
     return np.exp(x) / np.sum(np.exp(x))
 
@@ -335,6 +323,12 @@ def compute_relevance(Input, network, output_neuron, params, epsilon = .01):
     return R
 
 
+if __name__ == "__main__" and "-f" not in sys.argv:
+    params = get_parameters(argv)
+else:
+    params = get_parameters("".split())
+
+network, params = train_network(params)
 
 # create another example
 X, y = create_N_examples(params, 4)
