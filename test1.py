@@ -13,6 +13,9 @@ parser.add_argument("-l", "--loss_choice", default="MSE")
 parser.add_argument("-n", "--noise_scale", default=0.1)
 parser.add_argument("-m", "--model", default="mlp")
 parser.add_argument("--layer_sizes", default=[200, 200])
+parser.add_argument("-p", "--do_plotting", default=True)
+parser.add_argument("--verbose", default=False)
+
 if __name__ == "__main__" and "-f" not in sys.argv:
     params = vars(parser.parse_args())
 sys.argv
@@ -28,7 +31,6 @@ params["num_epochs"] = 50
 params["minibatch_size"] = 20
 params["noise_scale"] = .1
 params["INPUT_DIM"] = 10
-params["do_plotting"] = False
 params["output_neuron"] = 1 # for which output neuron to compute the relevance
 params["dataset"] = 402 # which dataset to use
 
@@ -108,7 +110,7 @@ def build_mlp(params, input_var=None):
     elif params["loss_choice"] == "MSE":
         l_out = lasagne.layers.DenseLayer(
                 current_hidden_layer, num_units=4,
-                nonlinearity=lasagne.nonlinearities.tanh)
+                nonlinearity=lasagne.nonlinearities.softmax)
     return l_out
 
 def iterate_minibatches(inputs, targets, batchsize, shuffle=False):
@@ -224,15 +226,16 @@ for epoch in range(params["num_epochs"]):
         val_acc += acc
         val_batches += 1
 
-    # Then we print the results for this epoch:
-    print("Epoch {} of {} took {:.3f}s".format(
-        epoch + 1, params["num_epochs"], time.time() - start_time))
-    print("  training loss:\t\t{:.6f}".format(train_err / train_batches))
+    if params["verbose"]:
+        # Then we print the results for this epoch:
+        print("Epoch {} of {} took {:.3f}s".format(
+            epoch + 1, params["num_epochs"], time.time() - start_time))
+        print("  training loss:\t\t{:.6f}".format(train_err / train_batches))
 
 
-    print("  validation loss:\t\t{:.6f}".format(val_err / val_batches))
-    print("  validation accuracy:\t\t{:.2f} %".format(
-        val_acc / val_batches * 100))
+        print("  validation loss:\t\t{:.6f}".format(val_err / val_batches))
+        print("  validation accuracy:\t\t{:.2f} %".format(
+            val_acc / val_batches * 100))
 
 # After training, we compute and print the test error:
 test_err = 0
@@ -332,6 +335,7 @@ for output_neuron in np.arange(4):
     plot_heatmap(R, output_neuron, axes[output_neuron+1], title)
 if params["do_plotting"]:
     plt.show()
+params["do_plotting"]
 
 
 
