@@ -6,13 +6,14 @@ import theano.tensor as T
 import lasagne
 import matplotlib.pyplot as plt
 import argparse
+from mytools import softmax
 
 
 def get_parameters(argv):
     # command line interface
-    parser = argparse.ArgumentParser(description='Process some integers.')
+    parser = argparse.ArgumentParser()
     parser.add_argument("-l", "--loss_choice", default="MSE")
-    parser.add_argument("-n", "--noise_scale", default=0.1)
+    parser.add_argument("-n", "--noise_scale", default=0.7)
     parser.add_argument("-e", "--epochs", default=50)
     parser.add_argument("-m", "--model", default="mlp")
     parser.add_argument("--layer_sizes", default=[200, 200])
@@ -23,9 +24,7 @@ def get_parameters(argv):
     params["N_train"] = 500
     params["N_val"] = 200
     params["N_test"] = 200
-    params["num_epochs"] = 50
     params["minibatch_size"] = 20
-    params["noise_scale"] = .1
     params["INPUT_DIM"] = 10
     params["output_neuron"] = 1 # for which output neuron to compute the relevance
     params["dataset"] = 2 # which dataset to use
@@ -41,6 +40,7 @@ def get_target(target, loss_choice):
         target_vec[target] = 1
         return target_vec
 
+
 def get_category(target):
     try:
         # if the target is a one-hot vector, return argmax
@@ -48,6 +48,7 @@ def get_category(target):
     except TypeError:
         # otherwise the target is already the category
         return target
+
 
 def create_N_examples(params, N):
     pic = np.zeros((10, 10))
@@ -102,8 +103,9 @@ def build_mlp(params, input_var=None):
     elif params["loss_choice"] == "MSE":
         l_out = lasagne.layers.DenseLayer(
                 current_hidden_layer, num_units=4,
-                nonlinearity=lasagne.nonlinearities.softmax)
+                nonlinearity=lasagne.nonlinearities.linear)
     return l_out
+
 
 def iterate_minibatches(inputs, targets, batchsize, shuffle=False):
     assert len(inputs) == len(targets)
@@ -202,7 +204,7 @@ def train_network(params):
     # Finally, launch the training loop.
     print("Starting training...")
     # We iterate over epochs:
-    for epoch in range(params["num_epochs"]):
+    for epoch in range(params["epochs"]):
         # In each epoch, we do a full pass over the training data:
         train_err = 0
         train_batches = 0
@@ -226,7 +228,7 @@ def train_network(params):
         if params["verbose"]:
             # Then we print the results for this epoch:
             print("Epoch {} of {} took {:.3f}s".format(
-                epoch + 1, params["num_epochs"], time.time() - start_time))
+                epoch + 1, params["epochs"], time.time() - start_time))
             print("  training loss:\t\t{:.6f}".format(train_err / train_batches))
 
 
@@ -250,10 +252,6 @@ def train_network(params):
     print("  test accuracy:\t\t{:.2f} %".format(
         test_acc / test_batches * 100))
     return network, params
-
-
-def softmax(x):
-    return np.exp(x) / np.sum(np.exp(x))
 
 
 def get_target_title(target):
@@ -281,16 +279,21 @@ def plot_heatmap(R_i, output_neuron, axis=None, title=""):
     plt.colorbar(plot, ax=axis)
 
 
-def compute_relevance(Input, network, output_neuron, params, epsilon = .01):
+def forward_pass(func_input, network, input_var):
+    get_activations = theano.function([input_var],
+                lasagne.layers.get_output(lasagne.layers.get_all_layers(network)))
+    activations = get_activations(np.expand_dims(np.expand_dims(func_input, axis=0), axis=0))
+    return activations
+
+
+def compute_relevance(func_input, network, output_neuron, params, epsilon = .01):
 
     # --- get paramters and activations for the input ---
     all_params = lasagne.layers.get_all_params(network)
     W_mats = all_params[0::2]
     biases = all_params[1::2]
+    activations = forward_pass(func_input, network, params["input_var"])
 
-    get_activations = theano.function([params["input_var"]],
-                lasagne.layers.get_output(lasagne.layers.get_all_layers(network)))
-    activations = get_activations(np.expand_dims(np.expand_dims(Input, axis=0), axis=0))
     # loop over W_mats, biases and activations to extract values and
     # flatten/transpose
     idx = 0
@@ -323,8 +326,21 @@ def compute_relevance(Input, network, output_neuron, params, epsilon = .01):
     return R
 
 
+def manual_classification(func_input):
+    left_bar = np.sum(func_input[3:7, 2])
+    right_bar = np.sum(func_input[3:7, 7])
+    upper_bar = np.sum(func_input[2, 3:7])
+    lower_bar = np.sum(func_input[7, 3:7])
+
+    left_open = right_bar + upper_bar + lower_bar
+    right_open = left_bar + upper_bar + lower_bar
+    up_open = left_bar + right_bar + lower_bar
+    low_open = left_bar + right_bar + upper_bar
+    return np.argmax([left_open, right_open, up_open, low_open])
+
+
 if __name__ == "__main__" and "-f" not in sys.argv:
-    params = get_parameters(argv)
+    params = get_parameters(sys.argv)
 else:
     params = get_parameters("".split())
 
@@ -343,3 +359,29 @@ for output_neuron in np.arange(4):
     plot_heatmap(R, output_neuron, axes[output_neuron+1], title)
 if params["do_plotting"]:
     plt.show()
+
+
+
+
+
+# comparing manual classification with network output
+X, y = create_N_examples(params, 100)
+manual_score = 0
+network_score = 0
+for idx in range(len(X)):
+    if idx%10 == 0:
+        print("Processing item " + str(idx))
+    # do manual classification by summing over bars
+    manual_prediction = manual_classification(X[idx][0])
+
+    if manual_prediction == get_category(y[idx]):
+        manual_score += 1
+
+    # let network classify
+    activations = forward_pass(X[idx][0], network, params["input_var"])
+    network_prediction = np.argmax(activations[-1])
+
+    if network_prediction == get_category(y[idx]):
+        network_score += 1
+print("Manual classification score: " + str(manual_score))
+print("Network classification score: " + str(network_score))
