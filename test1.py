@@ -7,27 +7,28 @@ import lasagne
 import matplotlib.pyplot as plt
 import argparse
 from mytools import softmax
-
+from sklearn.linear_model import LogisticRegression
 
 def get_parameters(argv):
     # command line interface
     parser = argparse.ArgumentParser()
     parser.add_argument("-l", "--loss_choice", default="MSE")
-    parser.add_argument("-n", "--noise_scale", default=0.7)
+    parser.add_argument("-n", "--noise_scale", default=0.6)
     parser.add_argument("-e", "--epochs", default=50)
     parser.add_argument("-m", "--model", default="mlp")
     parser.add_argument("--layer_sizes", default=[200, 200])
-    parser.add_argument("-p", "--do_plotting", default=True)
+    parser.add_argument("-p", "--do_plotting", default=False)
     parser.add_argument("--verbose", default=False)
 
-    params = vars(parser.parse_args(argv))
+    params = vars(parser.parse_args(argv[1:]))
     params["N_train"] = 500
     params["N_val"] = 200
     params["N_test"] = 200
     params["minibatch_size"] = 20
     params["INPUT_DIM"] = 10
-    params["output_neuron"] = 1 # for which output neuron to compute the relevance
-    params["dataset"] = 2 # which dataset to use
+    params["output_neuron"] = 1 # for which output neuron to compute the
+                                # relevance (choice 0..3)
+    params["dataset"] = 2 # which dataset to use (choice 0..3)
 
     return params
 
@@ -41,13 +42,22 @@ def get_target(target, loss_choice):
         return target_vec
 
 
+# THIS FUNCTION AND GET_TARGET STILL NEED SOME REWORKING
 def get_category(target):
-    try:
-        # if the target is a one-hot vector, return argmax
-        return np.argmax(target)
-    except TypeError:
-        # otherwise the target is already the category
+    if target.ndim == 0:
         return target
+    elif target.ndim == 1:
+        try:
+            # if the target is a one-hot vector, return argmax
+            return np.argmax(target)
+        except TypeError:
+            # otherwise the target is already the category
+            return target
+    else:
+        try:
+            return np.argmax(target, axis=1)
+        except TypeError:
+            return target
 
 
 def create_N_examples(params, N):
@@ -75,12 +85,12 @@ def create_N_examples(params, N):
                 current_pic[2, 2:8] = 0
             elif target == 3:
                 current_pic[7, 2:8] = 0
-            current_pic += (np.random.normal(size=(params["INPUT_DIM"], params["INPUT_DIM"]))*params["noise_scale"] -1) *2
+            current_pic += (np.random.normal(size=(params["INPUT_DIM"], params["INPUT_DIM"]))*params["noise_scale"])
             X[overall_idx, 0, :, :] = current_pic
             y[overall_idx] = get_target(target, params["loss_choice"])
             overall_idx += 1
-        if overall_idx >= N:
-            break
+            if overall_idx >= N:
+                break
     return X, y
 
 
@@ -271,7 +281,7 @@ def get_target_title(target):
 
 def plot_heatmap(R_i, output_neuron, axis=None, title=""):
     if axis == None:
-        fig, axis = plt.subplots(1, 2, figsize=(15, 10))
+        fig, axis = plt.subplots(1, 1, figsize=(15, 10))
 
     plot = axis.pcolor(R_i, cmap="viridis")
     axis.set_title(title)
@@ -345,7 +355,6 @@ else:
     params = get_parameters("".split())
 
 network, params = train_network(params)
-
 # create another example
 X, y = create_N_examples(params, 4)
 
@@ -363,25 +372,44 @@ if params["do_plotting"]:
 
 
 
-
 # comparing manual classification with network output
-X, y = create_N_examples(params, 100)
-manual_score = 0
-network_score = 0
-for idx in range(len(X)):
-    if idx%10 == 0:
-        print("Processing item " + str(idx))
-    # do manual classification by summing over bars
-    manual_prediction = manual_classification(X[idx][0])
+if True:
+    X, y = create_N_examples(params, 20)
+    manual_score = 0
+    network_score = 0
+    for idx in range(len(X)):
+        if idx%10 == 0:
+            print("Processing item " + str(idx))
+        # do manual classification by summing over bars
+        manual_prediction = manual_classification(X[idx][0])
 
-    if manual_prediction == get_category(y[idx]):
-        manual_score += 1
+        if manual_prediction == get_category(y[idx]):
+            manual_score += 1
 
-    # let network classify
-    activations = forward_pass(X[idx][0], network, params["input_var"])
-    network_prediction = np.argmax(activations[-1])
+        # let network classify
+        activations = forward_pass(X[idx][0], network, params["input_var"])
+        network_prediction = np.argmax(activations[-1])
+        if network_prediction == get_category(y[idx]):
+            network_score += 1
+    print("Manual classification score: " + str(manual_score))
+    print("Network classification score: " + str(network_score))
 
-    if network_prediction == get_category(y[idx]):
-        network_score += 1
-print("Manual classification score: " + str(manual_score))
-print("Network classification score: " + str(network_score))
+
+
+
+
+####### logistic regression
+print("Logistic Regression")
+X_train, y_train = create_N_examples(params, 500)
+X_train = np.reshape(X_train, (500, -1), order="C")
+y_train = get_category(y_train) # scikit-learn requires single values for classes
+
+LogReg = LogisticRegression()
+LogReg.fit(X_train, y_train)
+coefs = LogReg.coef_
+coefs = np.reshape(coefs, (coefs.shape[0], params["INPUT_DIM"],-1))
+
+params["dataset"] = 1
+title = "Coefs for " + str(get_target_title(params["dataset"]))
+plot_heatmap(coefs[params["dataset"]], y[params["dataset"]], title=title)
+plt.show()
