@@ -33,31 +33,16 @@ def get_parameters(argv):
     return params
 
 
-def get_target(target, loss_choice):
+def transform_target(target, loss_choice):
+    """ Transforms the target from an int value to other target choices
+        like one-hot
+    """
     if loss_choice == "categorical_crossentropy":
         return target
     elif loss_choice == "MSE":
-        target_vec = np.ones(4) * (-1)
-        target_vec[target] = 1
+        target_vec = np.ones((len(target), 4)) * (-1)
+        target_vec[range(len(target)), target] = 1
         return target_vec
-
-
-# THIS FUNCTION AND GET_TARGET STILL NEED SOME REWORKING
-def get_category(target):
-    if target.ndim == 0:
-        return target
-    elif target.ndim == 1:
-        try:
-            # if the target is a one-hot vector, return argmax
-            return np.argmax(target)
-        except TypeError:
-            # otherwise the target is already the category
-            return target
-    else:
-        try:
-            return np.argmax(target, axis=1)
-        except TypeError:
-            return target
 
 
 def create_N_examples(params, N):
@@ -67,13 +52,8 @@ def create_N_examples(params, N):
     pic[2, 3:7] = 1
     pic[7, 3:7] = 1
     overall_idx = 0
-    X = np.empty((N, 1, 10, 10))
-    if params["loss_choice"] == "categorical_crossentropy":
-        y = np.empty(N, dtype=np.int32)
-    elif params["loss_choice"] == "MSE":
-        y = np.empty((N, 4), dtype=np.int32)
-    else:
-        raise("Unrecognized Loss choice")
+    X = np.empty((N, 10, 10))
+    y = np.empty(N, dtype=np.int32)
     while overall_idx < N:
         for target in np.arange(4):
             current_pic = pic.copy()
@@ -86,8 +66,8 @@ def create_N_examples(params, N):
             elif target == 3:
                 current_pic[7, 2:8] = 0
             current_pic += (np.random.normal(size=(params["INPUT_DIM"], params["INPUT_DIM"]))*params["noise_scale"])
-            X[overall_idx, 0, :, :] = current_pic
-            y[overall_idx] = get_target(target, params["loss_choice"])
+            X[overall_idx, :, :] = current_pic
+            y[overall_idx] = target
             overall_idx += 1
             if overall_idx >= N:
                 break
@@ -135,6 +115,12 @@ def train_network(params):
     X_train, y_train = create_N_examples(params, params["N_train"])
     X_val, y_val = create_N_examples(params, params["N_val"])
     X_test, y_test = create_N_examples(params, params["N_test"])
+    X_train = np.expand_dims(X_train, 1)
+    X_val = np.expand_dims(X_val, 1)
+    X_test = np.expand_dims(X_test, 1)
+    y_train = transform_target(y_train, params["loss_choice"])
+    y_val = transform_target(y_val, params["loss_choice"])
+    y_test = transform_target(y_test, params["loss_choice"])
 
     if params["loss_choice"] == "categorical_crossentropy":
         # Prepare Theano variables for inputs and targets
@@ -265,7 +251,6 @@ def train_network(params):
 
 
 def get_target_title(target):
-    target = get_category(target)
     if target == 0:
         target_title = "left open"
     elif target == 1:
@@ -361,40 +346,13 @@ X, y = create_N_examples(params, 4)
 fig, axes = plt.subplots(1, 5, figsize=(15, 10))
 # first plotting the input image
 title = "Input image"
-plot_heatmap(X[params["dataset"]][0], y[params["dataset"]], axis=axes[0], title=title)
+plot_heatmap(X[params["dataset"]], y[params["dataset"]], axis=axes[0], title=title)
 for output_neuron in np.arange(4):
     title = "Relevance for target " + get_target_title(output_neuron)
-    R = compute_relevance(X[params["dataset"]][0], network, output_neuron, params)
+    R = compute_relevance(X[params["dataset"]], network, output_neuron, params)
     plot_heatmap(R, output_neuron, axes[output_neuron+1], title)
 if params["do_plotting"]:
     plt.show()
-
-
-
-
-# comparing manual classification with network output
-if True:
-    X, y = create_N_examples(params, 20)
-    manual_score = 0
-    network_score = 0
-    for idx in range(len(X)):
-        if idx%10 == 0:
-            print("Processing item " + str(idx))
-        # do manual classification by summing over bars
-        manual_prediction = manual_classification(X[idx][0])
-
-        if manual_prediction == get_category(y[idx]):
-            manual_score += 1
-
-        # let network classify
-        activations = forward_pass(X[idx][0], network, params["input_var"])
-        network_prediction = np.argmax(activations[-1])
-        if network_prediction == get_category(y[idx]):
-            network_score += 1
-    print("Manual classification score: " + str(manual_score))
-    print("Network classification score: " + str(network_score))
-
-
 
 
 
@@ -402,7 +360,6 @@ if True:
 print("Logistic Regression")
 X_train, y_train = create_N_examples(params, 500)
 X_train = np.reshape(X_train, (500, -1), order="C")
-y_train = get_category(y_train) # scikit-learn requires single values for classes
 
 LogReg = LogisticRegression()
 LogReg.fit(X_train, y_train)
@@ -413,3 +370,29 @@ params["dataset"] = 1
 title = "Coefs for " + str(get_target_title(params["dataset"]))
 plot_heatmap(coefs[params["dataset"]], y[params["dataset"]], title=title)
 plt.show()
+
+
+
+
+# comparing manual classification with network output
+X, y = create_N_examples(params, 20)
+manual_score = 0
+network_score = 0
+for idx in range(len(X)):
+    if idx%10 == 0:
+        print("Processing item " + str(idx))
+    # do manual classification by summing over bars
+    manual_prediction = manual_classification(X[idx])
+
+    if manual_prediction == get_category(y[idx]):
+        manual_score += 1
+
+network_output = lasagne.layers.get_output(network)
+get_network_output = theano.function([params["input_var"]], network_output)
+network_prediction = np.argmax(get_network_output(np.expand_dims(X, 1)), axis=1)
+network_score = np.sum(network_prediction == y)
+logreg_prediction = LogReg.predict(np.reshape(X, (len(X),100)))
+logreg_score = np.sum(logreg_prediction ==y)
+print("Manual classification score: " + str(manual_score))
+print("Network classification score: " + str(network_score))
+print("LogReg classification score: " + str(logreg_score))
