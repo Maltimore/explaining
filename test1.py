@@ -13,8 +13,8 @@ def get_parameters(argv):
     # command line interface
     parser = argparse.ArgumentParser()
     parser.add_argument("-l", "--loss_choice", default="MSE")
-    parser.add_argument("-n", "--noise_scale", default=0.6)
-    parser.add_argument("-e", "--epochs", default=50)
+    parser.add_argument("-n", "--noise_scale", default=0.6, type=float)
+    parser.add_argument("-e", "--epochs", default=50, type=int)
     parser.add_argument("-m", "--model", default="mlp")
     parser.add_argument("--layer_sizes", default="200,200")
     parser.add_argument("-p", "--do_plotting", default=False)
@@ -29,7 +29,7 @@ def get_parameters(argv):
     params["output_neuron"] = 1 # for which output neuron to compute the
                                 # relevance (choice 0..3)
     params["dataset"] = 2 # which dataset to use (choice 0..3)
-
+    print(type(params["noise_scale"]))
     # extract layer sizes from input string
     layer_list = []
     for size in params["layer_sizes"].split(","):
@@ -82,23 +82,26 @@ def create_N_examples(params, N):
 
 def build_mlp(params, input_var=None):
     # Input layer
-    l_in = lasagne.layers.InputLayer(shape=(None, 1, params["INPUT_DIM"], params["INPUT_DIM"]),
+    current_layer = lasagne.layers.InputLayer(shape=(None, 1, params["INPUT_DIM"], params["INPUT_DIM"]),
                                      input_var=input_var)
     # Hidden layers
     for layer_size in params["layer_sizes"]:
-        current_hidden_layer = lasagne.layers.DenseLayer(
-            l_in, num_units=layer_size,
+        if layer_size == 0:
+            print("Zero layer requested, ignoring...")
+            continue
+        current_layer = lasagne.layers.DenseLayer(
+            current_layer, num_units=layer_size,
             nonlinearity=lasagne.nonlinearities.rectify,
             W=lasagne.init.GlorotUniform())
 
     # Output layer
     if params["loss_choice"] == "categorical_crossentropy":
         l_out = lasagne.layers.DenseLayer(
-                current_hidden_layer, num_units=4,
+                current_layer, num_units=4,
                 nonlinearity=lasagne.nonlinearities.softmax)
     elif params["loss_choice"] == "MSE":
         l_out = lasagne.layers.DenseLayer(
-                current_hidden_layer, num_units=4,
+                current_layer, num_units=4,
                 nonlinearity=lasagne.nonlinearities.linear)
     return l_out
 
@@ -363,7 +366,7 @@ if params["do_plotting"]:
 
 
 ####### logistic regression
-print("Logistic Regression")
+print("Performing Logistic Regression")
 X_train, y_train = create_N_examples(params, 500)
 X_train = np.reshape(X_train, (500, -1), order="C")
 
@@ -382,7 +385,7 @@ if params["do_plotting"]:
 
 
 # comparing manual classification with network output
-X, y = create_N_examples(params, 20)
+X, y = create_N_examples(params, 200)
 manual_score = 0
 network_score = 0
 for idx in range(len(X)):
