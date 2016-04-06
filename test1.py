@@ -277,7 +277,7 @@ def plot_heatmap(R_i, output_neuron, axis=None, title=""):
     if axis == None:
         fig, axis = plt.subplots(1, 1, figsize=(15, 10))
 
-    plot = axis.pcolor(R_i, cmap="viridis")
+    plot = axis.pcolor(R_i, cmap="viridis", vmin=-np.max(abs(R_i)), vmax=np.max(abs(R_i)))
     axis.set_title(title)
     axis.invert_yaxis()
     plt.colorbar(plot, ax=axis)
@@ -359,18 +359,17 @@ else:
 network, params = train_network(params)
 # create another example
 X, y = create_N_examples(params, 4)
-
+#X[params["dataset"]] = np.ones((10,10))
 fig, axes = plt.subplots(1, 5, figsize=(15, 10))
 # first plotting the input image
 title = "Input image"
 plot_heatmap(X[params["dataset"]], y[params["dataset"]], axis=axes[0], title=title)
 for output_neuron in np.arange(4):
-    title = "Relevance for target " + get_target_title(output_neuron)
+    title = get_target_title(output_neuron)
     R = compute_relevance(X[params["dataset"]], network, output_neuron, params)
     plot_heatmap(R, output_neuron, axes[output_neuron+1], title)
-if params["do_plotting"]:
-    plt.show()
-
+    plt.subplots_adjust(wspace=.5)
+    plt.savefig(open("relevance.png", "w"))
 
 
 ####### logistic regression
@@ -390,10 +389,9 @@ coefs = np.reshape(coefs, (coefs.shape[0], params["INPUT_DIM"],-1))
 fig, axes = plt.subplots(1, 4, figsize=(15, 10))
 # first plotting the input image
 for output_neuron in np.arange(4):
-    title = "LogReg coefs for target " + get_target_title(output_neuron)
+    title = get_target_title(output_neuron)
     plot_heatmap(coefs[output_neuron], y[output_neuron], axes[output_neuron], title=title)
-if params["do_plotting"]:
-    plt.show()
+    plt.savefig(open("coefs.png", "w"), dpi=400)
 
 
 # comparing manual classification with network output
@@ -410,3 +408,7 @@ logreg_score = np.sum(logreg_prediction ==y)
 print("Manual classification score: " + str(manual_score))
 print("Network classification score: " + str(network_score))
 print("LogReg classification score: " + str(logreg_score))
+
+
+if params["do_plotting"]:
+    plt.show()
