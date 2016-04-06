@@ -21,7 +21,7 @@ def get_parameters(argv):
     parser.add_argument("--verbose", default=False)
 
     params = vars(parser.parse_args(argv[1:]))
-    params["N_train"] = 500
+    params["N_train"] = 1000
     params["N_val"] = 200
     params["N_test"] = 200
     params["minibatch_size"] = 20
@@ -29,7 +29,7 @@ def get_parameters(argv):
     params["output_neuron"] = 1 # for which output neuron to compute the
                                 # relevance (choice 0..3)
     params["dataset"] = 2 # which dataset to use (choice 0..3)
-    print(type(params["noise_scale"]))
+
     # extract layer sizes from input string
     layer_list = []
     for size in params["layer_sizes"].split(","):
@@ -330,17 +330,25 @@ def compute_relevance(func_input, network, output_neuron, params, epsilon = .01)
     return R
 
 
-def manual_classification(func_input):
-    left_bar = np.sum(func_input[3:7, 2])
-    right_bar = np.sum(func_input[3:7, 7])
-    upper_bar = np.sum(func_input[2, 3:7])
-    lower_bar = np.sum(func_input[7, 3:7])
+def manual_classification(X):
+    def single_classification(func_input):
+        left_bar = np.sum(func_input[3:7, 2])
+        right_bar = np.sum(func_input[3:7, 7])
+        upper_bar = np.sum(func_input[2, 3:7])
+        lower_bar = np.sum(func_input[7, 3:7])
 
-    left_open = right_bar + upper_bar + lower_bar
-    right_open = left_bar + upper_bar + lower_bar
-    up_open = left_bar + right_bar + lower_bar
-    low_open = left_bar + right_bar + upper_bar
-    return np.argmax([left_open, right_open, up_open, low_open])
+        left_open = right_bar + upper_bar + lower_bar
+        right_open = left_bar + upper_bar + lower_bar
+        up_open = left_bar + right_bar + lower_bar
+        low_open = left_bar + right_bar + upper_bar
+        return np.argmax([left_open, right_open, up_open, low_open])
+
+    manual_prediction = np.empty((len(X))
+    for idx in range(len(X)):
+        # do manual classification by summing over bars
+        manual_prediction[idx] = single_classification(X[idx])
+
+    return manual_prediction
 
 
 if __name__ == "__main__" and "-f" not in sys.argv:
@@ -367,8 +375,8 @@ if params["do_plotting"]:
 
 ####### logistic regression
 print("Performing Logistic Regression")
-X_train, y_train = create_N_examples(params, 500)
-X_train = np.reshape(X_train, (500, -1), order="C")
+X_train, y_train = create_N_examples(params, params["N_train"])
+X_train = np.reshape(X_train, (params["N_train"], -1), order="C")
 
 LogReg = LogisticRegression()
 LogReg.fit(X_train, y_train)
@@ -383,20 +391,11 @@ if params["do_plotting"]:
 
 
 
-
 # comparing manual classification with network output
 X, y = create_N_examples(params, 200)
-manual_score = 0
-network_score = 0
-for idx in range(len(X)):
-    if idx%10 == 0:
-        print("Processing item " + str(idx))
-    # do manual classification by summing over bars
-    manual_prediction = manual_classification(X[idx])
 
-    if manual_prediction == y[idx]:
-        manual_score += 1
-
+manual_output = manual_classification(X)
+manual_score = np.sum(manual_output == y)
 network_output = lasagne.layers.get_output(network)
 get_network_output = theano.function([params["input_var"]], network_output)
 network_prediction = np.argmax(get_network_output(np.expand_dims(X, 1)), axis=1)
