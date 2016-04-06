@@ -343,7 +343,7 @@ def manual_classification(X):
         low_open = left_bar + right_bar + upper_bar
         return np.argmax([left_open, right_open, up_open, low_open])
 
-    manual_prediction = np.empty((len(X))
+    manual_prediction = np.empty((len(X)))
     for idx in range(len(X)):
         # do manual classification by summing over bars
         manual_prediction[idx] = single_classification(X[idx])
@@ -377,18 +377,23 @@ if params["do_plotting"]:
 print("Performing Logistic Regression")
 X_train, y_train = create_N_examples(params, params["N_train"])
 X_train = np.reshape(X_train, (params["N_train"], -1), order="C")
-
 LogReg = LogisticRegression()
 LogReg.fit(X_train, y_train)
 coefs = LogReg.coef_
 coefs = np.reshape(coefs, (coefs.shape[0], params["INPUT_DIM"],-1))
 
-params["dataset"] = 1
-title = "Coefs for " + str(get_target_title(params["dataset"]))
-plot_heatmap(coefs[params["dataset"]], y[params["dataset"]], title=title)
+#title = "Coefs for " + str(get_target_title(params["dataset"]))
+#plot_heatmap(coefs[params["dataset"]], y[params["dataset"]], title=title)
+#if params["do_plotting"]:
+#    plt.show()
+
+fig, axes = plt.subplots(1, 4, figsize=(15, 10))
+# first plotting the input image
+for output_neuron in np.arange(4):
+    title = "LogReg coefs for target " + get_target_title(output_neuron)
+    plot_heatmap(coefs[output_neuron], y[output_neuron], axes[output_neuron], title=title)
 if params["do_plotting"]:
     plt.show()
-
 
 
 # comparing manual classification with network output
