@@ -16,7 +16,7 @@ def get_parameters(argv):
     parser.add_argument("-n", "--noise_scale", default=0.6)
     parser.add_argument("-e", "--epochs", default=50)
     parser.add_argument("-m", "--model", default="mlp")
-    parser.add_argument("--layer_sizes", default=[200, 200])
+    parser.add_argument("--layer_sizes", default="200,200")
     parser.add_argument("-p", "--do_plotting", default=False)
     parser.add_argument("--verbose", default=False)
 
@@ -29,6 +29,12 @@ def get_parameters(argv):
     params["output_neuron"] = 1 # for which output neuron to compute the
                                 # relevance (choice 0..3)
     params["dataset"] = 2 # which dataset to use (choice 0..3)
+
+    # extract layer sizes from input string
+    layer_list = []
+    for size in params["layer_sizes"].split(","):
+        layer_list.append(int(size))
+    params["layer_sizes"] = layer_list
 
     return params
 
@@ -369,7 +375,8 @@ coefs = np.reshape(coefs, (coefs.shape[0], params["INPUT_DIM"],-1))
 params["dataset"] = 1
 title = "Coefs for " + str(get_target_title(params["dataset"]))
 plot_heatmap(coefs[params["dataset"]], y[params["dataset"]], title=title)
-plt.show()
+if params["do_plotting"]:
+    plt.show()
 
 
 
@@ -384,7 +391,7 @@ for idx in range(len(X)):
     # do manual classification by summing over bars
     manual_prediction = manual_classification(X[idx])
 
-    if manual_prediction == get_category(y[idx]):
+    if manual_prediction == y[idx]:
         manual_score += 1
 
 network_output = lasagne.layers.get_output(network)
