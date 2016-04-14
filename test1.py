@@ -388,8 +388,6 @@ else:
 
 network, params = train_network(params)
 
-a = create_data(params, 5)
-a
 
 
 
