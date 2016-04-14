@@ -359,7 +359,7 @@ else:
 network, params = train_network(params)
 # create another example
 X, y = create_N_examples(params, 4)
-#X[params["dataset"]] = np.ones((10,10))
+X[params["dataset"]] = np.ones((10,10))
 fig, axes = plt.subplots(1, 5, figsize=(15, 10))
 # first plotting the input image
 title = "Input image"
