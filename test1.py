@@ -19,14 +19,14 @@ def get_parameters(argv):
     parser.add_argument("--layer_sizes", default="200,200")
     parser.add_argument("-p", "--do_plotting", default=False)
     parser.add_argument("--verbose", default=False)
-    parser.add_argument("-d", "--data", default="create_horseshoe_data")
+    parser.add_argument("-d", "--data", default="ring")
 
     params = vars(parser.parse_args(argv[1:]))
     params["N_train"] = 1000
     params["N_val"] = 200
     params["N_test"] = 200
     params["minibatch_size"] = 20
-    params["input_dim"] = 100
+    params["input_dim"] = 2
     params["output_neuron"] = 1 # for which output neuron to compute the
                                 # relevance (choice 0..3)
     params["dataset"] = 2 # which dataset to use (choice 0..3)
@@ -50,6 +50,15 @@ def transform_target(target, loss_choice):
         target_vec = np.ones((len(target), 4)) * (-1)
         target_vec[range(len(target)), target] = 1
         return target_vec
+
+
+def create_data(params, N):
+    if params["data"] == "horseshoe":
+        return create_horseshoe_data(params, N)
+    elif params["data"] == "ring":
+        return create_ring_data(params, N)
+    else:
+        raise("Requested datatype unknown")
 
 
 def create_horseshoe_data(params, N):
@@ -81,10 +90,26 @@ def create_horseshoe_data(params, N):
     return X, y
 
 
-a = params["data"](params, 10)
-
 def create_ring_data(params, N):
-    pass
+    n_classes = 2
+    n_centers = 10
+    n_dim = 2
+    n_per_class = 100
+    n_per_center = int(n_classes * n_per_class / n_centers)
+    C = .01*np.eye(n_dim)
+    radius = 1
+    class_means = radius*np.array([[np.sin(i*2.*np.pi/n_centers),np.cos(i*2.*np.pi/n_centers)] for i in range(n_centers)])
+
+    X = np.empty((n_centers * n_per_center, n_dim))
+    y = np.empty(n_centers * n_per_center, dtype=int)
+    idx = 0
+    while idx < n_centers:
+        curr_data = np.random.multivariate_normal((0,0), C, size=n_per_center) + class_means[idx, :]
+        X[idx*n_per_center:idx*n_per_center+n_per_center, :] = curr_data
+        y[idx*n_per_center:idx*n_per_center+n_per_center] = int(idx%n_classes)
+        idx += 1
+    return X, y
+
 
 def build_mlp(params, input_var=None):
     # Input layer
@@ -127,9 +152,9 @@ def iterate_minibatches(inputs, targets, batchsize, shuffle=False):
 
 def train_network(params):
 
-    X_train, y_train = create_horseshoe_data(params, params["N_train"])
-    X_val, y_val = create_horseshoe_data(params, params["N_val"])
-    X_test, y_test = create_horseshoe_data(params, params["N_test"])
+    X_train, y_train = create_data(params, params["N_train"])
+    X_val, y_val = create_data(params, params["N_val"])
+    X_test, y_test = create_data(params, params["N_test"])
     y_train = transform_target(y_train, params["loss_choice"])
     y_val = transform_target(y_val, params["loss_choice"])
     y_test = transform_target(y_test, params["loss_choice"])
@@ -363,12 +388,13 @@ else:
 
 network, params = train_network(params)
 
-
+a = create_data(params, 5)
+a
 
 
 
 ## create another example
-#X, y = create_horseshoe_data(params, 4)
+#X, y = create_data(params, 4)
 #
 #fig, axes = plt.subplots(1, 5, figsize=(15, 10))
 ## first plotting the input image
@@ -386,7 +412,7 @@ network, params = train_network(params)
 #
 ######## logistic regression
 #print("Performing Logistic Regression")
-#X_train, y_train = create_horseshoe_data(params, params["N_train"])
+#X_train, y_train = create_data(params, params["N_train"])
 #LogReg = LogisticRegression()
 #LogReg.fit(X_train, y_train)
 #coefs = LogReg.coef_
@@ -402,7 +428,7 @@ network, params = train_network(params)
 #
 #
 ## comparing manual classification with network output
-#X, y = create_horseshoe_data(params, 200)
+#X, y = create_data(params, 200)
 #
 ##manual_output = manual_classification(X)
 ##manual_score = np.sum(manual_output == y)
