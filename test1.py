@@ -117,9 +117,9 @@ def create_ring_data(params, N):
 
 def build_mlp(params, input_var=None):
     if params["bias_in_data"]:
-        bias = lasagne.init.Constant(0.)
-    else:
         bias = None
+    else:
+        bias = lasagne.init.Constant(0.)
 
     # Input layer
     current_layer = lasagne.layers.InputLayer(shape=(None, params["input_dim"]),
@@ -422,6 +422,7 @@ activations = forward_pass(X, network, params["input_var"])
 W_mats = get_network_parameters(network, params["bias_in_data"])
 S_mats = copy.deepcopy(W_mats) # this makes an actual copy of W_mats
 
+
 # --- forward propagation to compute preactivations ---
 preactivations = []
 for W, a in zip(W_mats, activations):
@@ -430,26 +431,19 @@ for W, a in zip(W_mats, activations):
 # -----------------------------------------------------
 
 
-for idx in range(len(W_mats)-1):
+for idx in range(len(S_mats)-1):
     # set the rows in the weight matrix to zero where the activation of the
     # neuron in the layer that this matrix produced was zero
     current_activations = activations[idx+1].squeeze()
     S_mats[idx][current_activations < 0.000001, :] = 0
 
-S_mats[0]
-preactivations[0]
-np.dot(S_mats[0], activations[0])
 s = S_mats[0]
 for idx in range(1, len(S_mats)):
     s = np.dot(S_mats[idx], s)
 
-s.shape
-s
 print("Weight vector: \n" + str(np.dot(s, X.T)))
 print("Preactivations last layer \n" + str(preactivations[-1]))
-activations[-1]
 
-lasagne.layers.get_all_param_values(network)
 
 
 ## create another example
