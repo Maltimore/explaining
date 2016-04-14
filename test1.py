@@ -9,7 +9,7 @@ import argparse
 from mytools import softmax
 from sklearn.linear_model import LogisticRegression
 
-def get_parameters(argv):
+def get_CLI_parameters(argv):
     # command line interface
     parser = argparse.ArgumentParser()
     parser.add_argument("-l", "--loss_choice", default="MSE")
@@ -19,14 +19,14 @@ def get_parameters(argv):
     parser.add_argument("--layer_sizes", default="200,200")
     parser.add_argument("-p", "--do_plotting", default=False)
     parser.add_argument("--verbose", default=False)
-    parser.add_argument("-d", "--data", default="ring")
+    parser.add_argument("-d", "--data", default="horseshoe")
 
     params = vars(parser.parse_args(argv[1:]))
     params["N_train"] = 1000
     params["N_val"] = 200
     params["N_test"] = 200
     params["minibatch_size"] = 20
-    params["input_dim"] = 2
+    params["input_dim"] = 100
     params["output_neuron"] = 1 # for which output neuron to compute the
                                 # relevance (choice 0..3)
     params["dataset"] = 2 # which dataset to use (choice 0..3)
@@ -108,7 +108,8 @@ def create_ring_data(params, N):
         X[idx*n_per_center:idx*n_per_center+n_per_center, :] = curr_data
         y[idx*n_per_center:idx*n_per_center+n_per_center] = int(idx%n_classes)
         idx += 1
-    return X, y
+
+    return X[:N], y[:N]
 
 
 def build_mlp(params, input_var=None):
@@ -312,48 +313,62 @@ def plot_heatmap(R_i, output_neuron, axis=None, title=""):
 
 
 def forward_pass(func_input, network, input_var):
+    """
+    IMPORTANT: THIS FUNCTION CAN ONLY BE CALLED WITH A SINGLE INPUT SAMPLE
+    """
     get_activations = theano.function([input_var],
                 lasagne.layers.get_output(lasagne.layers.get_all_layers(network)))
     # in the following, the dimension has to be expanded because we're
     # performing a forward pass of just one input sample here but the network
     # expects several
-    activations = get_activations(np.expand_dims(func_input, axis=0))
+    if func_input.ndim == 1:
+        activations = get_activations(np.expand_dims(func_input, axis=0))
+    elif func_input.ndim == 2:
+        if func_input.shape[0] > 1:
+            raise("ERROR: only pass a single datapoint to forward_pass()!")
+        activations = get_activations(func_input)
+    elif activations.ndim > 2:
+        raise("Input data had too many dimensions")
+
+    # Transpose all activation vectors so that they are column vectors
+    for idx in range(len(activations)):
+        activations[idx] = activations[idx].T
     return activations
 
 
-def compute_relevance(func_input, network, output_neuron, params, epsilon = .01):
+def get_network_parameters(network):
     # --- get paramters and activations for the input ---
     all_params = lasagne.layers.get_all_params(network)
     W_mats = all_params[0::2]
     biases = all_params[1::2]
-    activations = forward_pass(func_input, network, params["input_var"])
 
     # loop over W_mats, biases and activations to extract values and
     # flatten/transpose
     idx = 0
-    for W, b, X in zip(W_mats, biases, activations):
+    for W, b in zip(W_mats, biases):
         W_mats[idx] = W.get_value().T
         biases[idx] = b.get_value()
-        activations[idx] = X[0].flatten()
         idx += 1
-    # since there is one more layer than weight matrices/biases, extract last
-    # layers values
-    activations[idx] = activations[idx][0].flatten()
+    return W_mats, biases
 
+
+def compute_relevance(func_input, network, output_neuron, params, epsilon = .01):
+    W_mats, biases = get_network_parameters(network)
+    activations = forward_pass(func_input, network, params["input_var"])
 
     # --- forward propagation to compute preactivations ---
     preactivations = []
     for W, b, X in zip(W_mats, biases, activations):
-        preactivation = np.dot(W, X) + b
+        preactivation = np.dot(W, X) + np.expand_dims(b, 1)
         preactivations.append(preactivation)
 
     # --- relevance backpropagation ---
     # the first backpass is special so it can't be in the loop
     R_over_z = activations[-1][output_neuron] / (preactivations[-1][output_neuron] + epsilon)
-    R = np.multiply(W_mats[-1][output_neuron,:].T, activations[-2]) * R_over_z
+    R = np.multiply(W_mats[-1][output_neuron,:].T, activations[-2].T) * R_over_z
     for idx in np.arange(2, len(activations)):
         R_over_z = np.divide(R, preactivations[-idx] + epsilon)
-        Z_ij = np.multiply(W_mats[-idx], activations[-idx-1] + epsilon)
+        Z_ij = np.multiply(W_mats[-idx], activations[-idx-1].T + epsilon)
         R = np.sum(np.multiply(Z_ij.T, R_over_z), axis=1)
     R = R.reshape((10, 10))
 
@@ -382,30 +397,34 @@ def manual_classification(X):
 
 
 if __name__ == "__main__" and "-f" not in sys.argv:
-    params = get_parameters(sys.argv)
+    params = get_CLI_parameters(sys.argv)
 else:
-    params = get_parameters("".split())
+    params = get_CLI_parameters("".split())
 
 network, params = train_network(params)
 
 
-
-
-## create another example
-#X, y = create_data(params, 4)
+## single sample
+#X, y = create_data(params, 1)
 #
-#fig, axes = plt.subplots(1, 5, figsize=(15, 10))
-## first plotting the input image
-#title = "Input image"
-#X_withdims = np.reshape(X[params["dataset"]], (10, 10))
-#plot_heatmap(X_withdims, y[params["dataset"]], axis=axes[0], title=title)
-#for output_neuron in np.arange(4):
-#    title = get_target_title(output_neuron)
-#    X[params["dataset"]].shape
-#    R = compute_relevance(X[params["dataset"]], network, output_neuron, params)
-#    plot_heatmap(R, output_neuron, axes[output_neuron+1], title)
-#    plt.subplots_adjust(wspace=.5)
-#    plt.savefig(open("relevance.png", "w"))
+#activations = forward_pass(X, network, params["input_var"])
+#activations[-1].shape
+#
+# create another example
+X, y = create_data(params, 4)
+
+fig, axes = plt.subplots(1, 5, figsize=(15, 10))
+# first plotting the input image
+title = "Input image"
+X_withdims = np.reshape(X[params["dataset"]], (10, 10))
+plot_heatmap(X_withdims, y[params["dataset"]], axis=axes[0], title=title)
+for output_neuron in np.arange(4):
+    title = get_target_title(output_neuron)
+    X[params["dataset"]].shape
+    R = compute_relevance(X[params["dataset"]], network, output_neuron, params)
+    plot_heatmap(R, output_neuron, axes[output_neuron+1], title)
+    plt.subplots_adjust(wspace=.5)
+    plt.savefig(open("relevance.png", "w"))
 #
 #
 ######## logistic regression
