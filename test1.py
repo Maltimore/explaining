@@ -8,25 +8,28 @@ import matplotlib.pyplot as plt
 import argparse
 from mytools import softmax
 from sklearn.linear_model import LogisticRegression
+import copy
 
 def get_CLI_parameters(argv):
     # command line interface
     parser = argparse.ArgumentParser()
-    parser.add_argument("-l", "--loss_choice", default="MSE")
-    parser.add_argument("-n", "--noise_scale", default=0.6, type=float)
-    parser.add_argument("-e", "--epochs", default=50, type=int)
+    parser.add_argument("-l", "--loss_choice", default="categorical_crossentropy")
+    parser.add_argument("--noise_scale", default=0.3, type=float)
+    parser.add_argument("-e", "--epochs", default=5, type=int)
     parser.add_argument("-m", "--model", default="mlp")
-    parser.add_argument("--layer_sizes", default="200,200")
+    parser.add_argument("--layer_sizes", default="3, 4")
     parser.add_argument("-p", "--do_plotting", default=False)
     parser.add_argument("--verbose", default=False)
-    parser.add_argument("-d", "--data", default="horseshoe")
+    parser.add_argument("-d", "--data", default="ring")
+    parser.add_argument("-n", "--n_classes", default="2", type=int)
+    parser.add_argument("-b", "--bias_in_data", default=True)
 
     params = vars(parser.parse_args(argv[1:]))
     params["N_train"] = 1000
     params["N_val"] = 200
     params["N_test"] = 200
     params["minibatch_size"] = 20
-    params["input_dim"] = 100
+    params["input_dim"] = 2
     params["output_neuron"] = 1 # for which output neuron to compute the
                                 # relevance (choice 0..3)
     params["dataset"] = 2 # which dataset to use (choice 0..3)
@@ -101,7 +104,7 @@ def create_ring_data(params, N):
     class_means = radius*np.array([[np.sin(i*2.*np.pi/n_centers),np.cos(i*2.*np.pi/n_centers)] for i in range(n_centers)])
 
     X = np.empty((n_centers * n_per_center, n_dim))
-    y = np.empty(n_centers * n_per_center, dtype=int)
+    y = np.empty(n_centers * n_per_center, dtype=np.int32)
     idx = 0
     while idx < n_centers:
         curr_data = np.random.multivariate_normal((0,0), C, size=n_per_center) + class_means[idx, :]
@@ -113,9 +116,14 @@ def create_ring_data(params, N):
 
 
 def build_mlp(params, input_var=None):
+    if params["bias_in_data"]:
+        bias = lasagne.init.Constant(0.)
+    else:
+        bias = None
+
     # Input layer
     current_layer = lasagne.layers.InputLayer(shape=(None, params["input_dim"]),
-                                     input_var=input_var)
+                                     input_var=input_var, b=bias)
     # Hidden layers
     for layer_size in params["layer_sizes"]:
         if layer_size == 0:
@@ -124,16 +132,18 @@ def build_mlp(params, input_var=None):
         current_layer = lasagne.layers.DenseLayer(
             current_layer, num_units=layer_size,
             nonlinearity=lasagne.nonlinearities.rectify,
-            W=lasagne.init.GlorotUniform())
+            W=lasagne.init.GlorotUniform(),
+            b=bias)
 
     # Output layer
     if params["loss_choice"] == "categorical_crossentropy":
         l_out = lasagne.layers.DenseLayer(
-                current_layer, num_units=4,
-                nonlinearity=lasagne.nonlinearities.softmax)
+                current_layer, num_units=params["n_classes"],
+                nonlinearity=lasagne.nonlinearities.softmax,
+                b=bias)
     elif params["loss_choice"] == "MSE":
         l_out = lasagne.layers.DenseLayer(
-                current_layer, num_units=4,
+                current_layer, num_units=params["n_classes"],
                 nonlinearity=lasagne.nonlinearities.linear)
     return l_out
 
@@ -162,7 +172,7 @@ def train_network(params):
 
     if params["loss_choice"] == "categorical_crossentropy":
         # Prepare Theano variables for inputs and targets
-        input_var = T.tensor4('inputs')
+        input_var = T.matrix('inputs')
         target_var = T.ivector('targets')
 
         print("Building model and compiling functions...")
@@ -280,7 +290,6 @@ def train_network(params):
         test_err += err
         test_acc += acc
         test_batches += 1
-    print(test_batches)
     print("Final results:")
     print("  test loss:\t\t\t{:.6f}".format(test_err / test_batches))
     print("  test accuracy:\t\t{:.2f} %".format(
@@ -336,24 +345,26 @@ def forward_pass(func_input, network, input_var):
     return activations
 
 
-def get_network_parameters(network):
+def get_network_parameters(network, bias_in_data):
     # --- get paramters and activations for the input ---
-    all_params = lasagne.layers.get_all_params(network)
-    W_mats = all_params[0::2]
-    biases = all_params[1::2]
+    all_params = lasagne.layers.get_all_param_values(network)
+    if bias_in_data:
+        W_mats = all_params
+    else:
+        W_mats = all_params[0::2]
+        biases = all_params[1::2]
 
-    # loop over W_mats, biases and activations to extract values and
-    # flatten/transpose
-    idx = 0
-    for W, b in zip(W_mats, biases):
-        W_mats[idx] = W.get_value().T
-        biases[idx] = b.get_value()
-        idx += 1
-    return W_mats, biases
+    for idx in range(len(W_mats)):
+        W_mats[idx] = W_mats[idx].T
+
+    if bias_in_data:
+        return W_mats
+    else:
+        return W_mats, biases
 
 
 def compute_relevance(func_input, network, output_neuron, params, epsilon = .01):
-    W_mats, biases = get_network_parameters(network)
+    W_mats, biases = get_network_parameters(network, params["bias_in_data"])
     activations = forward_pass(func_input, network, params["input_var"])
 
     # --- forward propagation to compute preactivations ---
@@ -367,7 +378,7 @@ def compute_relevance(func_input, network, output_neuron, params, epsilon = .01)
     R_over_z = activations[-1][output_neuron] / (preactivations[-1][output_neuron] + epsilon)
     R = np.multiply(W_mats[-1][output_neuron,:].T, activations[-2].T) * R_over_z
     for idx in np.arange(2, len(activations)):
-        R_over_z = np.divide(R, preactivations[-idx] + epsilon)
+        R_over_z = np.divide(R, preactivations[-idx].squeeze() + epsilon)
         Z_ij = np.multiply(W_mats[-idx], activations[-idx-1].T + epsilon)
         R = np.sum(np.multiply(Z_ij.T, R_over_z), axis=1)
     R = R.reshape((10, 10))
@@ -404,27 +415,58 @@ else:
 network, params = train_network(params)
 
 
-## single sample
-#X, y = create_data(params, 1)
-#
-#activations = forward_pass(X, network, params["input_var"])
-#activations[-1].shape
-#
-# create another example
-X, y = create_data(params, 4)
+# single sample
+X, y = create_data(params, 1)
 
-fig, axes = plt.subplots(1, 5, figsize=(15, 10))
-# first plotting the input image
-title = "Input image"
-X_withdims = np.reshape(X[params["dataset"]], (10, 10))
-plot_heatmap(X_withdims, y[params["dataset"]], axis=axes[0], title=title)
-for output_neuron in np.arange(4):
-    title = get_target_title(output_neuron)
-    X[params["dataset"]].shape
-    R = compute_relevance(X[params["dataset"]], network, output_neuron, params)
-    plot_heatmap(R, output_neuron, axes[output_neuron+1], title)
-    plt.subplots_adjust(wspace=.5)
-    plt.savefig(open("relevance.png", "w"))
+activations = forward_pass(X, network, params["input_var"])
+W_mats = get_network_parameters(network, params["bias_in_data"])
+S_mats = copy.deepcopy(W_mats) # this makes an actual copy of W_mats
+
+# --- forward propagation to compute preactivations ---
+preactivations = []
+for W, a in zip(W_mats, activations):
+    preactivation = np.dot(W, a)
+    preactivations.append(preactivation)
+# -----------------------------------------------------
+
+
+for idx in range(len(W_mats)-1):
+    # set the rows in the weight matrix to zero where the activation of the
+    # neuron in the layer that this matrix produced was zero
+    current_activations = activations[idx+1].squeeze()
+    S_mats[idx][current_activations < 0.000001, :] = 0
+
+S_mats[0]
+preactivations[0]
+np.dot(S_mats[0], activations[0])
+s = S_mats[0]
+for idx in range(1, len(S_mats)):
+    s = np.dot(S_mats[idx], s)
+
+s.shape
+s
+print("Weight vector: \n" + str(np.dot(s, X.T)))
+print("Preactivations last layer \n" + str(preactivations[-1]))
+activations[-1]
+
+lasagne.layers.get_all_param_values(network)
+
+
+## create another example
+#X, y = create_data(params, 4)
+#
+#fig, axes = plt.subplots(1, 5, figsize=(15, 10))
+## first plotting the input image
+#title = "Input image"
+#X_withdims = np.reshape(X[params["dataset"]], (10, 10))
+#plot_heatmap(X_withdims, y[params["dataset"]], axis=axes[0], title=title)
+#for output_neuron in np.arange(4):
+#    title = get_target_title(output_neuron)
+#    X[params["dataset"]].shape
+#    R = compute_relevance(X[params["dataset"]], network, output_neuron, params)
+#    plot_heatmap(R, output_neuron, axes[output_neuron+1], title)
+#    plt.subplots_adjust(wspace=.5)
+#    plt.savefig(open("relevance.png", "w"))
 #
 #
 ######## logistic regression
