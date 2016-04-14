@@ -19,6 +19,7 @@ def get_parameters(argv):
     parser.add_argument("--layer_sizes", default="200,200")
     parser.add_argument("-p", "--do_plotting", default=False)
     parser.add_argument("--verbose", default=False)
+    parser.add_argument("-d", "--data", default="create_horseshoe_data")
 
     params = vars(parser.parse_args(argv[1:]))
     params["N_train"] = 1000
@@ -51,7 +52,7 @@ def transform_target(target, loss_choice):
         return target_vec
 
 
-def create_N_examples(params, N):
+def create_horseshoe_data(params, N):
     pic = np.zeros((10, 10))
     pic[3:7, 2] = 1
     pic[3:7, 7] = 1
@@ -79,6 +80,11 @@ def create_N_examples(params, N):
                 break
     return X, y
 
+
+a = params["data"](params, 10)
+
+def create_ring_data(params, N):
+    pass
 
 def build_mlp(params, input_var=None):
     # Input layer
@@ -121,9 +127,9 @@ def iterate_minibatches(inputs, targets, batchsize, shuffle=False):
 
 def train_network(params):
 
-    X_train, y_train = create_N_examples(params, params["N_train"])
-    X_val, y_val = create_N_examples(params, params["N_val"])
-    X_test, y_test = create_N_examples(params, params["N_test"])
+    X_train, y_train = create_horseshoe_data(params, params["N_train"])
+    X_val, y_val = create_horseshoe_data(params, params["N_val"])
+    X_test, y_test = create_horseshoe_data(params, params["N_test"])
     y_train = transform_target(y_train, params["loss_choice"])
     y_val = transform_target(y_val, params["loss_choice"])
     y_test = transform_target(y_test, params["loss_choice"])
@@ -356,54 +362,59 @@ else:
     params = get_parameters("".split())
 
 network, params = train_network(params)
-# create another example
-X, y = create_N_examples(params, 4)
-
-fig, axes = plt.subplots(1, 5, figsize=(15, 10))
-# first plotting the input image
-title = "Input image"
-X_withdims = np.reshape(X[params["dataset"]], (10, 10))
-plot_heatmap(X_withdims, y[params["dataset"]], axis=axes[0], title=title)
-for output_neuron in np.arange(4):
-    title = get_target_title(output_neuron)
-    X[params["dataset"]].shape
-    R = compute_relevance(X[params["dataset"]], network, output_neuron, params)
-    plot_heatmap(R, output_neuron, axes[output_neuron+1], title)
-    plt.subplots_adjust(wspace=.5)
-    plt.savefig(open("relevance.png", "w"))
 
 
-####### logistic regression
-print("Performing Logistic Regression")
-X_train, y_train = create_N_examples(params, params["N_train"])
-LogReg = LogisticRegression()
-LogReg.fit(X_train, y_train)
-coefs = LogReg.coef_
-coefs = np.reshape(coefs, (coefs.shape[0], params["input_dim"],-1))
 
 
-fig, axes = plt.subplots(1, 4, figsize=(15, 10))
-# first plotting the input image
-for output_neuron in np.arange(4):
-    title = get_target_title(output_neuron)
-    plot_heatmap(coefs[output_neuron], y[output_neuron], axes[output_neuron], title=title)
-    plt.savefig(open("coefs.png", "w"), dpi=400)
 
-
-# comparing manual classification with network output
-X, y = create_N_examples(params, 200)
-
-#manual_output = manual_classification(X)
-#manual_score = np.sum(manual_output == y)
-network_output = lasagne.layers.get_output(network)
-get_network_output = theano.function([params["input_var"]], network_output)
-network_prediction = np.argmax(get_network_output(X, axis=1))
-network_score = np.sum(network_prediction == y)
-logreg_prediction = LogReg.predict(np.reshape(X, (len(X),100)))
-logreg_score = np.sum(logreg_prediction ==y)
-#print("Manual classification score: " + str(manual_score))
-print("Network classification score: " + str(network_score))
-print("LogReg classification score: " + str(logreg_score))
+## create another example
+#X, y = create_horseshoe_data(params, 4)
+#
+#fig, axes = plt.subplots(1, 5, figsize=(15, 10))
+## first plotting the input image
+#title = "Input image"
+#X_withdims = np.reshape(X[params["dataset"]], (10, 10))
+#plot_heatmap(X_withdims, y[params["dataset"]], axis=axes[0], title=title)
+#for output_neuron in np.arange(4):
+#    title = get_target_title(output_neuron)
+#    X[params["dataset"]].shape
+#    R = compute_relevance(X[params["dataset"]], network, output_neuron, params)
+#    plot_heatmap(R, output_neuron, axes[output_neuron+1], title)
+#    plt.subplots_adjust(wspace=.5)
+#    plt.savefig(open("relevance.png", "w"))
+#
+#
+######## logistic regression
+#print("Performing Logistic Regression")
+#X_train, y_train = create_horseshoe_data(params, params["N_train"])
+#LogReg = LogisticRegression()
+#LogReg.fit(X_train, y_train)
+#coefs = LogReg.coef_
+#coefs = np.reshape(coefs, (coefs.shape[0], 10,-1))
+#
+#
+#fig, axes = plt.subplots(1, 4, figsize=(15, 10))
+## first plotting the input image
+#for output_neuron in np.arange(4):
+#    title = get_target_title(output_neuron)
+#    plot_heatmap(coefs[output_neuron], y[output_neuron], axes[output_neuron], title=title)
+#    plt.savefig(open("coefs.png", "w"), dpi=400)
+#
+#
+## comparing manual classification with network output
+#X, y = create_horseshoe_data(params, 200)
+#
+##manual_output = manual_classification(X)
+##manual_score = np.sum(manual_output == y)
+#network_output = lasagne.layers.get_output(network)
+#get_network_output = theano.function([params["input_var"]], network_output)
+#network_prediction = np.argmax(get_network_output(X), axis=1)
+#network_score = np.sum(network_prediction == y)
+#logreg_prediction = LogReg.predict(np.reshape(X, (len(X),100)))
+#logreg_score = np.sum(logreg_prediction ==y)
+##print("Manual classification score: " + str(manual_score))
+#print("Network classification score: " + str(network_score))
+#print("LogReg classification score: " + str(logreg_score))
 
 
 if params["do_plotting"]:
