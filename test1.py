@@ -25,7 +25,7 @@ def get_parameters(argv):
     params["N_val"] = 200
     params["N_test"] = 200
     params["minibatch_size"] = 20
-    params["INPUT_DIM"] = 10
+    params["input_dim"] = 100
     params["output_neuron"] = 1 # for which output neuron to compute the
                                 # relevance (choice 0..3)
     params["dataset"] = 2 # which dataset to use (choice 0..3)
@@ -58,7 +58,7 @@ def create_N_examples(params, N):
     pic[2, 3:7] = 1
     pic[7, 3:7] = 1
     overall_idx = 0
-    X = np.empty((N, 10, 10))
+    X = np.empty((N, params["input_dim"]))
     y = np.empty(N, dtype=np.int32)
     while overall_idx < N:
         for target in np.arange(4):
@@ -71,8 +71,8 @@ def create_N_examples(params, N):
                 current_pic[2, 2:8] = 0
             elif target == 3:
                 current_pic[7, 2:8] = 0
-            current_pic += (np.random.normal(size=(params["INPUT_DIM"], params["INPUT_DIM"]))*params["noise_scale"])
-            X[overall_idx, :, :] = current_pic
+            current_pic += (np.random.normal(size=(10, 10))*params["noise_scale"])
+            X[overall_idx, :] = np.reshape(current_pic, (-1))
             y[overall_idx] = target
             overall_idx += 1
             if overall_idx >= N:
@@ -82,7 +82,7 @@ def create_N_examples(params, N):
 
 def build_mlp(params, input_var=None):
     # Input layer
-    current_layer = lasagne.layers.InputLayer(shape=(None, 1, params["INPUT_DIM"], params["INPUT_DIM"]),
+    current_layer = lasagne.layers.InputLayer(shape=(None, params["input_dim"]),
                                      input_var=input_var)
     # Hidden layers
     for layer_size in params["layer_sizes"]:
@@ -124,9 +124,6 @@ def train_network(params):
     X_train, y_train = create_N_examples(params, params["N_train"])
     X_val, y_val = create_N_examples(params, params["N_val"])
     X_test, y_test = create_N_examples(params, params["N_test"])
-    X_train = np.expand_dims(X_train, 1)
-    X_val = np.expand_dims(X_val, 1)
-    X_test = np.expand_dims(X_test, 1)
     y_train = transform_target(y_train, params["loss_choice"])
     y_val = transform_target(y_val, params["loss_choice"])
     y_test = transform_target(y_test, params["loss_choice"])
@@ -166,7 +163,7 @@ def train_network(params):
 
     if params["loss_choice"] == "MSE":
         # Prepare Theano variables for inputs and targets
-        input_var = T.tensor4('inputs')
+        input_var = T.matrix('inputs')
         target_var = T.dmatrix('targets')
 
         print("Building model and compiling functions...")
@@ -286,12 +283,14 @@ def plot_heatmap(R_i, output_neuron, axis=None, title=""):
 def forward_pass(func_input, network, input_var):
     get_activations = theano.function([input_var],
                 lasagne.layers.get_output(lasagne.layers.get_all_layers(network)))
-    activations = get_activations(np.expand_dims(np.expand_dims(func_input, axis=0), axis=0))
+    # in the following, the dimension has to be expanded because we're
+    # performing a forward pass of just one input sample here but the network
+    # expects several
+    activations = get_activations(np.expand_dims(func_input, axis=0))
     return activations
 
 
 def compute_relevance(func_input, network, output_neuron, params, epsilon = .01):
-
     # --- get paramters and activations for the input ---
     all_params = lasagne.layers.get_all_params(network)
     W_mats = all_params[0::2]
@@ -359,13 +358,15 @@ else:
 network, params = train_network(params)
 # create another example
 X, y = create_N_examples(params, 4)
-X[params["dataset"]] = np.ones((10,10))
+
 fig, axes = plt.subplots(1, 5, figsize=(15, 10))
 # first plotting the input image
 title = "Input image"
-plot_heatmap(X[params["dataset"]], y[params["dataset"]], axis=axes[0], title=title)
+X_withdims = np.reshape(X[params["dataset"]], (10, 10))
+plot_heatmap(X_withdims, y[params["dataset"]], axis=axes[0], title=title)
 for output_neuron in np.arange(4):
     title = get_target_title(output_neuron)
+    X[params["dataset"]].shape
     R = compute_relevance(X[params["dataset"]], network, output_neuron, params)
     plot_heatmap(R, output_neuron, axes[output_neuron+1], title)
     plt.subplots_adjust(wspace=.5)
@@ -375,16 +376,11 @@ for output_neuron in np.arange(4):
 ####### logistic regression
 print("Performing Logistic Regression")
 X_train, y_train = create_N_examples(params, params["N_train"])
-X_train = np.reshape(X_train, (params["N_train"], -1), order="C")
 LogReg = LogisticRegression()
 LogReg.fit(X_train, y_train)
 coefs = LogReg.coef_
-coefs = np.reshape(coefs, (coefs.shape[0], params["INPUT_DIM"],-1))
+coefs = np.reshape(coefs, (coefs.shape[0], params["input_dim"],-1))
 
-#title = "Coefs for " + str(get_target_title(params["dataset"]))
-#plot_heatmap(coefs[params["dataset"]], y[params["dataset"]], title=title)
-#if params["do_plotting"]:
-#    plt.show()
 
 fig, axes = plt.subplots(1, 4, figsize=(15, 10))
 # first plotting the input image
@@ -397,15 +393,15 @@ for output_neuron in np.arange(4):
 # comparing manual classification with network output
 X, y = create_N_examples(params, 200)
 
-manual_output = manual_classification(X)
-manual_score = np.sum(manual_output == y)
+#manual_output = manual_classification(X)
+#manual_score = np.sum(manual_output == y)
 network_output = lasagne.layers.get_output(network)
 get_network_output = theano.function([params["input_var"]], network_output)
-network_prediction = np.argmax(get_network_output(np.expand_dims(X, 1)), axis=1)
+network_prediction = np.argmax(get_network_output(X, axis=1))
 network_score = np.sum(network_prediction == y)
 logreg_prediction = LogReg.predict(np.reshape(X, (len(X),100)))
 logreg_score = np.sum(logreg_prediction ==y)
-print("Manual classification score: " + str(manual_score))
+#print("Manual classification score: " + str(manual_score))
 print("Network classification score: " + str(network_score))
 print("LogReg classification score: " + str(logreg_score))
 
