@@ -16,9 +16,9 @@ def get_CLI_parameters(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument("-l", "--loss_choice", default="categorical_crossentropy")
     parser.add_argument("--noise_scale", default=0.3, type=float)
-    parser.add_argument("-e", "--epochs", default=5, type=int)
+    parser.add_argument("-e", "--epochs", default=500, type=int)
     parser.add_argument("-m", "--model", default="mlp")
-    parser.add_argument("--layer_sizes", default="4, 4")
+    parser.add_argument("--layer_sizes", default="40, 40")
     parser.add_argument("-p", "--do_plotting", default=False)
     parser.add_argument("--verbose", default=False)
     parser.add_argument("-d", "--data", default="ring")
@@ -471,49 +471,48 @@ s = S_mats[0]
 for idx in range(1, len(S_mats)):
     s = np.dot(S_mats[idx], s)
 
-X = np.vstack((X.T, 1)).T # the double transpose is due to weird behavior of stack
-print("Weight vector output: \n" + str(np.dot(s, X.T)))
+X_ext = np.vstack((X.T, 1)).T # the double transpose is due to weird behavior of stack
+print("Weight vector output: \n" + str(np.dot(s, X_ext.T)))
 print("Preactivations last layer \n" + str(preactivations[-1]))
+X_pos = X
+
+
+w = s[:, :-1]
+w[0] /= np.linalg.norm(w[0])
+w[1] /= np.linalg.norm(w[1])
 
 
 
 
-## create some data so scatterplot
-#X, y = create_ring_data(params, 300)
-## create a mesh to plot in
-#h = .01 # step size in the mesh
-#x_min, x_max = -2, 2
-#y_min, y_max = -2, 2
-#xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
-#                     np.arange(y_min, y_max, h))
-#mesh = np.c_[xx.ravel(), yy.ravel()]
-#
-#onesvec = np.atleast_2d(np.ones((mesh.shape[0]))).T
-#mesh = np.hstack((mesh, onesvec))
-#
-#Z = predict(mesh, network)
-#
-## Put the result into a color plot
-#Z = Z.reshape(xx.shape)
-#plt.figure()
-#plt.scatter(X[:,0], X[:,1], c=y, cmap="gray", s=40)
-#plt.contour(xx, yy, Z, cmap="gray", alpha=0.8)
-#plt.xlabel('x')
-#plt.ylabel('y')
-#plt.xlim(xx.min(), xx.max())
-#plt.ylim(yy.min(), yy.max())
-#plt.show()
-#
-#length = 2
-#my_linewidth = 3
-#w_vecs = np.empty((n_dim, 2, n_classes))
-#for idx in range(n_classes):
-#    w_vecs[:,:,idx] = np.array([[0, coefs[idx,0]], [0, coefs[idx,1]]])
-#    w_vecs[:,:,idx] /= np.linalg.norm(w_vecs[:,:,idx])
-#    plt.scatter(X[y==idx, 0], X[y==idx, 1], c=colors[idx], s=100)
-#    plt.plot(w_vecs[0, :, idx], w_vecs[1, :, idx], label="class " + str(idx), linewidth=my_linewidth, color=colors[idx])
-#plt.legend()
-#plt.title("Weight vectors")
+# create some data so scatterplot
+X, y = create_ring_data(params, 300)
+# create a mesh to plot in
+h = .01 # step size in the mesh
+x_min, x_max = -2, 2
+y_min, y_max = -2, 2
+xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
+                     np.arange(y_min, y_max, h))
+mesh = np.c_[xx.ravel(), yy.ravel()]
+
+Z = predict(mesh, network)
+
+# Put the result into a color plot
+Z = Z.reshape(xx.shape)
+plt.figure()
+plt.scatter(X[:,0], X[:,1], c=y, cmap="gray", s=40)
+plt.scatter(X_pos[0, 0], X_pos[0, 1], s = 200)
+plt.contour(xx, yy, Z, cmap="gray", alpha=0.8)
+plt.xlabel('x')
+plt.ylabel('y')
+plt.xlim(xx.min(), xx.max())
+plt.ylim(yy.min(), yy.max())
+
+
+length = 2
+my_linewidth = 3
+plt.plot([0, w[0, 0]], [0, w[0, 1]], linewidth=my_linewidth)
+plt.plot([0, w[1, 0]], [0, w[1, 1]], linewidth=my_linewidth)
+plt.show()
 
 
 ## create another example
