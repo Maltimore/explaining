@@ -9,20 +9,21 @@ import argparse
 from mytools import softmax
 from sklearn.linear_model import LogisticRegression
 import copy
+na = np.newaxis
 
 def get_CLI_parameters(argv):
     # command line interface
     parser = argparse.ArgumentParser()
     parser.add_argument("-l", "--loss_choice", default="categorical_crossentropy")
     parser.add_argument("--noise_scale", default=0.3, type=float)
-    parser.add_argument("-e", "--epochs", default=500, type=int)
+    parser.add_argument("-e", "--epochs", default=5, type=int)
     parser.add_argument("-m", "--model", default="mlp")
-    parser.add_argument("--layer_sizes", default="30, 30")
+    parser.add_argument("--layer_sizes", default="4, 4")
     parser.add_argument("-p", "--do_plotting", default=False)
     parser.add_argument("--verbose", default=False)
     parser.add_argument("-d", "--data", default="ring")
     parser.add_argument("-c", "--n_classes", default="2", type=int)
-    parser.add_argument("-b", "--bias_in_data", default=True)
+    parser.add_argument("-b", "--bias_in_data", default=False)
 
     params = vars(parser.parse_args(argv[1:]))
     params["N_train"] = 1000
@@ -436,33 +437,43 @@ network, params = train_network(params)
 X, y = create_data(params, 1)
 
 activations = forward_pass(X, network, params["input_var"])
-W_mats= get_network_parameters(network, params["bias_in_data"])
+W_mats, biases = get_network_parameters(network, params["bias_in_data"])
 S_mats = copy.deepcopy(W_mats) # this makes an actual copy of W_mats
 
 # --- forward propagation to compute preactivations ---
 preactivations = []
-for W, a in zip(W_mats, activations):
-    preactivation = np.dot(W, a)
+for W, b, a in zip(W_mats, biases, activations):
+    preactivation = np.dot(W, a) + b
     preactivations.append(preactivation)
 # -----------------------------------------------------
 
 
-for idx in range(len(S_mats)-1):
+for idx in range(len(S_mats)):
+    # extend the weight matrices with a row of zeroes below (last element a 1),
+    # and a column to the right in which there are the biases of the next layer.
+    S_mats[idx] = np.vstack((S_mats[idx], np.zeros(S_mats[idx].shape[1])[na, :]))
+    bias_and_one = np.vstack((biases[idx], 1))
+    S_mats[idx] = np.hstack((S_mats[idx], bias_and_one))
+
+    # extend all activations by a 1
+    activations[idx+1] = np.vstack((activations[idx+1], 1))
+
     # set the rows in the weight matrix to zero where the activation of the
     # neuron in the layer that this matrix produced was zero
-    current_activations = activations[idx+1].squeeze()
+    S_mats[idx][activations[idx+1].squeeze() < 0.000001, :] = 0
 
-    S_mats[idx][current_activations < 0.000001, :] = 0
+# for the weight matrix to the last layer we don't need to incorporate the bias
+S_mats[-1] = S_mats[-1][:-1, :]
+
+
 
 s = S_mats[0]
 for idx in range(1, len(S_mats)):
     s = np.dot(S_mats[idx], s)
 
-
+X = np.vstack((X.T, 1)).T # the double transpose is due to weird behavior of stack
 print("Weight vector output: \n" + str(np.dot(s, X.T)))
 print("Preactivations last layer \n" + str(preactivations[-1]))
-
-
 
 
 
