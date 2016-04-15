@@ -15,13 +15,13 @@ def get_CLI_parameters(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument("-l", "--loss_choice", default="categorical_crossentropy")
     parser.add_argument("--noise_scale", default=0.3, type=float)
-    parser.add_argument("-e", "--epochs", default=5, type=int)
+    parser.add_argument("-e", "--epochs", default=500, type=int)
     parser.add_argument("-m", "--model", default="mlp")
-    parser.add_argument("--layer_sizes", default="3, 4")
+    parser.add_argument("--layer_sizes", default="30, 30")
     parser.add_argument("-p", "--do_plotting", default=False)
     parser.add_argument("--verbose", default=False)
     parser.add_argument("-d", "--data", default="ring")
-    parser.add_argument("-n", "--n_classes", default="2", type=int)
+    parser.add_argument("-c", "--n_classes", default="2", type=int)
     parser.add_argument("-b", "--bias_in_data", default=True)
 
     params = vars(parser.parse_args(argv[1:]))
@@ -94,11 +94,14 @@ def create_horseshoe_data(params, N):
 
 
 def create_ring_data(params, N):
+    """
+    This function desperately needs some love
+    """
     n_classes = 2
     n_centers = 10
     n_dim = 2
     n_per_class = 100
-    n_per_center = int(n_classes * n_per_class / n_centers)
+    n_per_center = int(params["n_classes"] * n_per_class / n_centers)
     C = .01*np.eye(n_dim)
     radius = 1
     class_means = radius*np.array([[np.sin(i*2.*np.pi/n_centers),np.cos(i*2.*np.pi/n_centers)] for i in range(n_centers)])
@@ -112,6 +115,9 @@ def create_ring_data(params, N):
         y[idx*n_per_center:idx*n_per_center+n_per_center] = int(idx%n_classes)
         idx += 1
 
+    if params["bias_in_data"]:
+        onesvec = np.atleast_2d(np.ones((X.shape[0]))).T
+        X = np.hstack((X, onesvec))
     return X[:N], y[:N]
 
 
@@ -122,8 +128,12 @@ def build_mlp(params, input_var=None):
         bias = lasagne.init.Constant(0.)
 
     # Input layer
-    current_layer = lasagne.layers.InputLayer(shape=(None, params["input_dim"]),
-                                     input_var=input_var, b=bias)
+    if params["bias_in_data"]:
+        current_layer = lasagne.layers.InputLayer(shape=(None, params["input_dim"]+1),
+                                        input_var=input_var, b=bias)
+    else:
+        current_layer = lasagne.layers.InputLayer(shape=(None, params["input_dim"]),
+                                        input_var=input_var, b=bias)
     # Hidden layers
     for layer_size in params["layer_sizes"]:
         if layer_size == 0:
@@ -356,6 +366,8 @@ def get_network_parameters(network, bias_in_data):
 
     for idx in range(len(W_mats)):
         W_mats[idx] = W_mats[idx].T
+        if not params["bias_in_data"]:
+            biases[idx] = np.atleast_2d(biases[idx]).T
 
     if bias_in_data:
         return W_mats
@@ -407,6 +419,11 @@ def manual_classification(X):
     return manual_prediction
 
 
+def predict(X, network):
+    get_predictions = theano.function([params["input_var"]], lasagne.layers.get_output(network))
+    output = get_predictions(X)
+    return np.argmax(output, axis=1)
+
 if __name__ == "__main__" and "-f" not in sys.argv:
     params = get_CLI_parameters(sys.argv)
 else:
@@ -419,9 +436,8 @@ network, params = train_network(params)
 X, y = create_data(params, 1)
 
 activations = forward_pass(X, network, params["input_var"])
-W_mats = get_network_parameters(network, params["bias_in_data"])
+W_mats= get_network_parameters(network, params["bias_in_data"])
 S_mats = copy.deepcopy(W_mats) # this makes an actual copy of W_mats
-
 
 # --- forward propagation to compute preactivations ---
 preactivations = []
@@ -435,15 +451,58 @@ for idx in range(len(S_mats)-1):
     # set the rows in the weight matrix to zero where the activation of the
     # neuron in the layer that this matrix produced was zero
     current_activations = activations[idx+1].squeeze()
+
     S_mats[idx][current_activations < 0.000001, :] = 0
 
 s = S_mats[0]
 for idx in range(1, len(S_mats)):
     s = np.dot(S_mats[idx], s)
 
-print("Weight vector: \n" + str(np.dot(s, X.T)))
+
+print("Weight vector output: \n" + str(np.dot(s, X.T)))
 print("Preactivations last layer \n" + str(preactivations[-1]))
 
+
+
+
+
+
+## create some data so scatterplot
+#X, y = create_ring_data(params, 300)
+## create a mesh to plot in
+#h = .01 # step size in the mesh
+#x_min, x_max = -2, 2
+#y_min, y_max = -2, 2
+#xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
+#                     np.arange(y_min, y_max, h))
+#mesh = np.c_[xx.ravel(), yy.ravel()]
+#
+#onesvec = np.atleast_2d(np.ones((mesh.shape[0]))).T
+#mesh = np.hstack((mesh, onesvec))
+#
+#Z = predict(mesh, network)
+#
+## Put the result into a color plot
+#Z = Z.reshape(xx.shape)
+#plt.figure()
+#plt.scatter(X[:,0], X[:,1], c=y, cmap="gray", s=40)
+#plt.contour(xx, yy, Z, cmap="gray", alpha=0.8)
+#plt.xlabel('x')
+#plt.ylabel('y')
+#plt.xlim(xx.min(), xx.max())
+#plt.ylim(yy.min(), yy.max())
+#plt.show()
+#
+#length = 2
+#my_linewidth = 3
+#w_vecs = np.empty((n_dim, 2, n_classes))
+#for idx in range(n_classes):
+#    w_vecs[:,:,idx] = np.array([[0, coefs[idx,0]], [0, coefs[idx,1]]])
+#    w_vecs[:,:,idx] /= np.linalg.norm(w_vecs[:,:,idx])
+#    plt.scatter(X[y==idx, 0], X[y==idx, 1], c=colors[idx], s=100)
+#    plt.plot(w_vecs[0, :, idx], w_vecs[1, :, idx], label="class " + str(idx), linewidth=my_linewidth, color=colors[idx])
+#plt.legend()
+#plt.title("Weight vectors")
 
 
 ## create another example
