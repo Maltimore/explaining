@@ -16,7 +16,7 @@ def get_CLI_parameters(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument("-l", "--loss_choice", default="categorical_crossentropy")
     parser.add_argument("--noise_scale", default=0.3, type=float)
-    parser.add_argument("-e", "--epochs", default=500, type=int)
+    parser.add_argument("-e", "--epochs", default=20, type=int)
     parser.add_argument("-m", "--model", default="mlp")
     parser.add_argument("--layer_sizes", default="40, 40")
     parser.add_argument("-p", "--do_plotting", default=False)
@@ -98,22 +98,19 @@ def create_ring_data(params, N):
     """
     This function desperately needs some love
     """
-    n_classes = 2
     n_centers = 10
-    n_dim = 2
-    n_per_class = 100
-    n_per_center = int(params["n_classes"] * n_per_class / n_centers)
-    C = .01*np.eye(n_dim)
+    n_per_center = int(np.ceil(N / n_centers))
+    C = .01*np.eye(params["input_dim"])
     radius = 1
     class_means = radius*np.array([[np.sin(i*2.*np.pi/n_centers),np.cos(i*2.*np.pi/n_centers)] for i in range(n_centers)])
 
-    X = np.empty((n_centers * n_per_center, n_dim))
+    X = np.empty((n_centers * n_per_center, params["input_dim"]))
     y = np.empty(n_centers * n_per_center, dtype=np.int32)
     idx = 0
     while idx < n_centers:
         curr_data = np.random.multivariate_normal((0,0), C, size=n_per_center) + class_means[idx, :]
         X[idx*n_per_center:idx*n_per_center+n_per_center, :] = curr_data
-        y[idx*n_per_center:idx*n_per_center+n_per_center] = int(idx%n_classes)
+        y[idx*n_per_center:idx*n_per_center+n_per_center] = int(idx%params["n_classes"])
         idx += 1
 
     if params["bias_in_data"]:
@@ -433,9 +430,12 @@ else:
 network, params = train_network(params)
 
 
+datapoint = 7
 # single sample
-X, y = create_data(params, 1)
-
+X, y = create_data(params, 10)
+X = X[na, datapoint]
+y = y[datapoint]
+X
 activations = forward_pass(X, network, params["input_var"])
 W_mats, biases = get_network_parameters(network, params["bias_in_data"])
 S_mats = copy.deepcopy(W_mats) # this makes an actual copy of W_mats
@@ -471,20 +471,24 @@ s = S_mats[0]
 for idx in range(1, len(S_mats)):
     s = np.dot(S_mats[idx], s)
 
-X_ext = np.vstack((X.T, 1)).T # the double transpose is due to weird behavior of stack
+X_ext = np.vstack((X.T, 1)).T # the double transpose is due to weird behavior of vstack
 print("Weight vector output: \n" + str(np.dot(s, X_ext.T)))
 print("Preactivations last layer \n" + str(preactivations[-1]))
 X_pos = X
 
-
+s
 w = s[:, :-1]
 w[0] /= np.linalg.norm(w[0])
 w[1] /= np.linalg.norm(w[1])
 
 
+length = 2
+my_linewidth = 3
+plt.figure()
+plt.plot([0, w[0, 0]], [0, w[0, 1]], linewidth=my_linewidth)
+plt.plot([0, w[1, 0]], [0, w[1, 1]], linewidth=my_linewidth)
 
-
-# create some data so scatterplot
+# create some data for scatterplot
 X, y = create_ring_data(params, 300)
 # create a mesh to plot in
 h = .01 # step size in the mesh
@@ -498,7 +502,6 @@ Z = predict(mesh, network)
 
 # Put the result into a color plot
 Z = Z.reshape(xx.shape)
-plt.figure()
 plt.scatter(X[:,0], X[:,1], c=y, cmap="gray", s=40)
 plt.scatter(X_pos[0, 0], X_pos[0, 1], s = 200)
 plt.contour(xx, yy, Z, cmap="gray", alpha=0.8)
@@ -506,12 +509,6 @@ plt.xlabel('x')
 plt.ylabel('y')
 plt.xlim(xx.min(), xx.max())
 plt.ylim(yy.min(), yy.max())
-
-
-length = 2
-my_linewidth = 3
-plt.plot([0, w[0, 0]], [0, w[0, 1]], linewidth=my_linewidth)
-plt.plot([0, w[1, 0]], [0, w[1, 1]], linewidth=my_linewidth)
 plt.show()
 
 
