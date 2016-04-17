@@ -16,9 +16,9 @@ def get_CLI_parameters(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument("-l", "--loss_choice", default="categorical_crossentropy")
     parser.add_argument("--noise_scale", default=0.3, type=float)
-    parser.add_argument("-e", "--epochs", default=20, type=int)
+    parser.add_argument("-e", "--epochs", default=5000, type=int)
     parser.add_argument("-m", "--model", default="mlp")
-    parser.add_argument("--layer_sizes", default="40, 40")
+    parser.add_argument("--layer_sizes", default="20, 20")
     parser.add_argument("-p", "--do_plotting", default=False)
     parser.add_argument("--verbose", default=False)
     parser.add_argument("-d", "--data", default="ring")
@@ -26,7 +26,7 @@ def get_CLI_parameters(argv):
     parser.add_argument("-b", "--bias_in_data", default=False)
 
     params = vars(parser.parse_args(argv[1:]))
-    params["N_train"] = 1000
+    params["N_train"] = 100
     params["N_val"] = 200
     params["N_test"] = 200
     params["minibatch_size"] = 20
@@ -430,12 +430,12 @@ else:
 network, params = train_network(params)
 
 
-datapoint = 7
+datapoint = 8
 # single sample
 X, y = create_data(params, 10)
 X = X[na, datapoint]
 y = y[datapoint]
-X
+
 activations = forward_pass(X, network, params["input_var"])
 W_mats, biases = get_network_parameters(network, params["bias_in_data"])
 S_mats = copy.deepcopy(W_mats) # this makes an actual copy of W_mats
@@ -446,7 +446,6 @@ for W, b, a in zip(W_mats, biases, activations):
     preactivation = np.dot(W, a) + b
     preactivations.append(preactivation)
 # -----------------------------------------------------
-
 
 for idx in range(len(S_mats)):
     # extend the weight matrices with a row of zeroes below (last element a 1),
@@ -460,7 +459,8 @@ for idx in range(len(S_mats)):
 
     # set the rows in the weight matrix to zero where the activation of the
     # neuron in the layer that this matrix produced was zero
-    S_mats[idx][activations[idx+1].squeeze() < 0.000001, :] = 0
+    if idx < len(S_mats)-1:
+        S_mats[idx][activations[idx+1].squeeze() < 0.000001, :] = 0
 
 # for the weight matrix to the last layer we don't need to incorporate the bias
 S_mats[-1] = S_mats[-1][:-1, :]
@@ -476,11 +476,13 @@ print("Weight vector output: \n" + str(np.dot(s, X_ext.T)))
 print("Preactivations last layer \n" + str(preactivations[-1]))
 X_pos = X
 
+S_mats[-1]
+preactivations[-1]
 s
 w = s[:, :-1]
 w[0] /= np.linalg.norm(w[0])
 w[1] /= np.linalg.norm(w[1])
-
+w
 
 length = 2
 my_linewidth = 3
