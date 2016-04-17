@@ -1,22 +1,12 @@
-import time
-import sys
-import numpy as np
-import theano
-import theano.tensor as T
-import lasagne
-import matplotlib.pyplot as plt
 import argparse
-from mytools import softmax
-from sklearn.linear_model import LogisticRegression
-import copy
-na = np.newaxis
+import sys
 
 def get_CLI_parameters(argv):
     # command line interface
     parser = argparse.ArgumentParser()
     parser.add_argument("-l", "--loss_choice", default="categorical_crossentropy")
     parser.add_argument("--noise_scale", default=0.3, type=float)
-    parser.add_argument("-e", "--epochs", default=5000, type=int)
+    parser.add_argument("-e", "--epochs", default=5, type=int)
     parser.add_argument("-m", "--model", default="mlp")
     parser.add_argument("--layer_sizes", default="20, 20")
     parser.add_argument("-p", "--do_plotting", default=False)
@@ -24,9 +14,10 @@ def get_CLI_parameters(argv):
     parser.add_argument("-d", "--data", default="ring")
     parser.add_argument("-c", "--n_classes", default="2", type=int)
     parser.add_argument("-b", "--bias_in_data", default=False)
+    parser.add_argument("-r", "--remote", default=False)
 
     params = vars(parser.parse_args(argv[1:]))
-    params["N_train"] = 100
+    params["N_train"] = 10000
     params["N_val"] = 200
     params["N_test"] = 200
     params["minibatch_size"] = 20
@@ -43,6 +34,25 @@ def get_CLI_parameters(argv):
 
     return params
 
+
+if __name__ == "__main__" and "-f" not in sys.argv:
+    params = get_CLI_parameters(sys.argv)
+else:
+    params = get_CLI_parameters("".split())
+
+import time
+import numpy as np
+import theano
+import theano.tensor as T
+import lasagne
+import matplotlib
+if params["remote"]:
+    matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+from mytools import softmax
+from sklearn.linear_model import LogisticRegression
+import copy
+na = np.newaxis
 
 def transform_target(target, loss_choice):
     """ Transforms the target from an int value to other target choices
@@ -422,98 +432,107 @@ def predict(X, network):
     output = get_predictions(X)
     return np.argmax(output, axis=1)
 
-if __name__ == "__main__" and "-f" not in sys.argv:
-    params = get_CLI_parameters(sys.argv)
-else:
-    params = get_CLI_parameters("".split())
 
-network, params = train_network(params)
+def compute_w(X, network, params):
+    activations = forward_pass(X, network, params["input_var"])
+    W_mats, biases = get_network_parameters(network, params["bias_in_data"])
+    S_mats = copy.deepcopy(W_mats) # this makes an actual copy of W_mats
+
+    # --- forward propagation to compute preactivations ---
+    # this is not strictly necessary to compute, I only use it to verify that
+    # what the output of the computed weight vector is correct
+    preactivations = []
+    for W, b, a in zip(W_mats, biases, activations):
+        preactivation = np.dot(W, a) + b
+        preactivations.append(preactivation)
+    # -----------------------------------------------------
+
+    for idx in range(len(S_mats)):
+        # extend the weight matrices with a row of zeroes below (last element a 1),
+        # and a column to the right in which there are the biases of the next layer.
+        S_mats[idx] = np.vstack((S_mats[idx], np.zeros(S_mats[idx].shape[1])[na, :]))
+        bias_and_one = np.vstack((biases[idx], 1))
+        S_mats[idx] = np.hstack((S_mats[idx], bias_and_one))
+
+        # extend all activations by a 1
+        activations[idx+1] = np.vstack((activations[idx+1], 1))
+
+        # set the rows in the weight matrix to zero where the activation of the
+        # neuron in the layer that this matrix produced was zero
+        if idx < len(S_mats)-1:
+            S_mats[idx][activations[idx+1].squeeze() < 0.000001, :] = 0
+
+    # for the weight matrix to the last layer we don't need to incorporate the bias
+    S_mats[-1] = S_mats[-1][:-1, :]
+
+    s = S_mats[0]
+    for idx in range(1, len(S_mats)):
+        s = np.dot(S_mats[idx], s)
+
+#    X_ext = np.vstack((X.T, 1)).T # the double transpose is due to weird behavior of vstack
+#    print("Weight vector output: \n" + str(np.dot(s, X_ext.T)))
+#    print("Preactivations last layer \n" + str(preactivations[-1]))
+
+    w = s[:, :-1]
+    w[0] /= np.linalg.norm(w[0])
+    w[1] /= np.linalg.norm(w[1])
+
+    return w
 
 
-datapoint = 8
-# single sample
-X, y = create_data(params, 10)
-X = X[na, datapoint]
-y = y[datapoint]
+N_vals = np.arange(100, 110)
+angles = np.empty(N_vals.shape[0])
+for idx, N_val in enumerate(N_vals):
+    print("Computing w angle for N: " + str(N_val) + " out of " + str(N_vals[-1]))
+    params["N_train"] = N_val
+    network, params = train_network(params)
 
-activations = forward_pass(X, network, params["input_var"])
-W_mats, biases = get_network_parameters(network, params["bias_in_data"])
-S_mats = copy.deepcopy(W_mats) # this makes an actual copy of W_mats
+    X_pos = np.array([0, 1])[na, :]
+    w = compute_w(X_pos, network, params)
 
-# --- forward propagation to compute preactivations ---
-preactivations = []
-for W, b, a in zip(W_mats, biases, activations):
-    preactivation = np.dot(W, a) + b
-    preactivations.append(preactivation)
-# -----------------------------------------------------
+    def compute_angle(x, y):
+        angle = np.arctan2(y, x)
+        if angle < 0:
+            angle += 2*np.pi
+        return angle
 
-for idx in range(len(S_mats)):
-    # extend the weight matrices with a row of zeroes below (last element a 1),
-    # and a column to the right in which there are the biases of the next layer.
-    S_mats[idx] = np.vstack((S_mats[idx], np.zeros(S_mats[idx].shape[1])[na, :]))
-    bias_and_one = np.vstack((biases[idx], 1))
-    S_mats[idx] = np.hstack((S_mats[idx], bias_and_one))
-
-    # extend all activations by a 1
-    activations[idx+1] = np.vstack((activations[idx+1], 1))
-
-    # set the rows in the weight matrix to zero where the activation of the
-    # neuron in the layer that this matrix produced was zero
-    if idx < len(S_mats)-1:
-        S_mats[idx][activations[idx+1].squeeze() < 0.000001, :] = 0
-
-# for the weight matrix to the last layer we don't need to incorporate the bias
-S_mats[-1] = S_mats[-1][:-1, :]
+    angles[idx] = compute_angle(w[0, 0], w[0, 1])
 
 
-
-s = S_mats[0]
-for idx in range(1, len(S_mats)):
-    s = np.dot(S_mats[idx], s)
-
-X_ext = np.vstack((X.T, 1)).T # the double transpose is due to weird behavior of vstack
-print("Weight vector output: \n" + str(np.dot(s, X_ext.T)))
-print("Preactivations last layer \n" + str(preactivations[-1]))
-X_pos = X
-
-S_mats[-1]
-preactivations[-1]
-s
-w = s[:, :-1]
-w[0] /= np.linalg.norm(w[0])
-w[1] /= np.linalg.norm(w[1])
-w
-
-length = 2
-my_linewidth = 3
 plt.figure()
-plt.plot([0, w[0, 0]], [0, w[0, 1]], linewidth=my_linewidth)
-plt.plot([0, w[1, 0]], [0, w[1, 1]], linewidth=my_linewidth)
-
-# create some data for scatterplot
-X, y = create_ring_data(params, 300)
-# create a mesh to plot in
-h = .01 # step size in the mesh
-x_min, x_max = -2, 2
-y_min, y_max = -2, 2
-xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
-                     np.arange(y_min, y_max, h))
-mesh = np.c_[xx.ravel(), yy.ravel()]
-
-Z = predict(mesh, network)
-
-# Put the result into a color plot
-Z = Z.reshape(xx.shape)
-plt.scatter(X[:,0], X[:,1], c=y, cmap="gray", s=40)
-plt.scatter(X_pos[0, 0], X_pos[0, 1], s = 200)
-plt.contour(xx, yy, Z, cmap="gray", alpha=0.8)
-plt.xlabel('x')
-plt.ylabel('y')
-plt.xlim(xx.min(), xx.max())
-plt.ylim(yy.min(), yy.max())
+plt.plot(N_vals, angles)
 plt.show()
-
-
+plt.savefig(open("angles.png", "w"))
+#length = 2
+#my_linewidth = 3
+#plt.figure()
+#plt.plot([0, w[0, 0]], [0, w[0, 1]], linewidth=my_linewidth)
+#plt.plot([0, w[1, 0]], [0, w[1, 1]], linewidth=my_linewidth)
+#
+## create some data for scatterplot
+#X, y = create_ring_data(params, params["N_train"])
+## create a mesh to plot in
+#h = .01 # step size in the mesh
+#x_min, x_max = -2, 2
+#y_min, y_max = -2, 2
+#xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
+#                     np.arange(y_min, y_max, h))
+#mesh = np.c_[xx.ravel(), yy.ravel()]
+#
+#Z = predict(mesh, network)
+#
+## Put the result into a color plot
+#Z = Z.reshape(xx.shape)
+#plt.scatter(X[:,0], X[:,1], c=y, cmap="gray", s=40)
+#plt.scatter(X_pos[0, 0], X_pos[0, 1], s = 200)
+#plt.contour(xx, yy, Z, cmap="gray", alpha=0.8)
+#plt.xlabel('x')
+#plt.ylabel('y')
+#plt.xlim(xx.min(), xx.max())
+#plt.ylim(yy.min(), yy.max())
+#plt.show()
+#
+#
 ## create another example
 #X, y = create_data(params, 4)
 #
