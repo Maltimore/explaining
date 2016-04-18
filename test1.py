@@ -494,8 +494,8 @@ def compute_w(X, network, params):
     return w
 
 
-N_vals = np.arange(100, 10000, 100)
-angles = np.empty(N_vals.shape[0])
+N_vals = np.arange(100, 300, 100)
+angles = np.empty((params["n_classes"], N_vals.shape[0]))
 for idx, N_val in enumerate(N_vals):
     print("Computing w angle for N: " + str(N_val) + " out of " + str(N_vals[-1]))
     params["N_train"] = N_val
@@ -510,17 +510,16 @@ for idx, N_val in enumerate(N_vals):
             angle += 2*np.pi
         return angle
 
-    angles[idx] = compute_angle(w[0, 0], w[0, 1])
+    angles[0, idx] = compute_angle(w[0, 0], w[0, 1])
+    angles[1, idx] = compute_angle(w[1, 0], w[1, 1])
 
-
-plt.figure()
-plt.plot(N_vals, angles)
-plt.savefig(open(params["plots_dir"] + "/angles.png", "wb"))
 
 results = {"N_vals": N_vals,
            "angles": angles,
            "params": params}
 pickle.dump(results, open(params["results_dir"] + "/angles.dump", "wb"))
+
+
 #length = 2
 #my_linewidth = 3
 #plt.figure()
