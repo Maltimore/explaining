@@ -1,5 +1,6 @@
 import argparse
 import sys
+import os
 
 def get_CLI_parameters(argv):
     # command line interface
@@ -15,6 +16,7 @@ def get_CLI_parameters(argv):
     parser.add_argument("-c", "--n_classes", default="2", type=int)
     parser.add_argument("-b", "--bias_in_data", default=False)
     parser.add_argument("-r", "--remote", default=False)
+    parser.add_argument("-n", "--name", default="default")
 
     params = vars(parser.parse_args(argv[1:]))
     params["N_train"] = 10000
@@ -32,6 +34,15 @@ def get_CLI_parameters(argv):
         layer_list.append(int(size))
     params["layer_sizes"] = layer_list
 
+    # determine the directories to save data
+    params["program_dir"] = os.getcwd()
+    params["results_dir"] = params["program_dir"] + "/results/" + params["name"]
+    params["plots_dir"] = params["program_dir"] + "/plots/" + params["name"]
+    if not os.path.exists(params["results_dir"]):
+        os.makedirs(params["results_dir"])
+    if not os.path.exists(params["plots_dir"]):
+        os.makedirs(params["plots_dir"])
+
     return params
 
 
@@ -40,6 +51,8 @@ if __name__ == "__main__" and "-f" not in sys.argv:
 else:
     params = get_CLI_parameters("".split())
 
+# the import statements aren't all at the beginning because some things are
+# imported based on the command line inputs
 import time
 import numpy as np
 import theano
@@ -52,6 +65,7 @@ import matplotlib.pyplot as plt
 from mytools import softmax
 from sklearn.linear_model import LogisticRegression
 import copy
+import pickle
 na = np.newaxis
 
 def transform_target(target, loss_choice):
@@ -480,7 +494,7 @@ def compute_w(X, network, params):
     return w
 
 
-N_vals = np.arange(100, 110)
+N_vals = np.arange(108, 110)
 angles = np.empty(N_vals.shape[0])
 for idx, N_val in enumerate(N_vals):
     print("Computing w angle for N: " + str(N_val) + " out of " + str(N_vals[-1]))
@@ -501,8 +515,12 @@ for idx, N_val in enumerate(N_vals):
 
 plt.figure()
 plt.plot(N_vals, angles)
-plt.show()
-plt.savefig(open("angles.png", "w"))
+plt.savefig(open(params["plots_dir"] + "/angles.png", "wb"))
+
+results = {"N_vals": N_vals,
+           "angles": angles,
+           "params": params}
+pickle.dump(results, open(params["results_dir"] + "/angles.dump", "wb"))
 #length = 2
 #my_linewidth = 3
 #plt.figure()
