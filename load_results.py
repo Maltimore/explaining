@@ -6,7 +6,7 @@ na = np.newaxis
 
 colors = ["blue", "red", "orange", "green"]
 
-simulation_name = "default"
+simulation_name = "two_output_neurons"
 resultfile = "angles.dump"
 resultpath = os.getcwd() + "/results/" + simulation_name + "/"
 resultpath
@@ -16,6 +16,7 @@ results
 
 N_vals = results["N_vals"]
 angles = results["angles"] * 360/(2*np.pi)
+params = results["params"]
 
 plt.figure()
 for idx in np.arange(params["n_classes"]):
