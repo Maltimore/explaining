@@ -494,7 +494,7 @@ def compute_w(X, network, params):
     return w
 
 
-N_vals = np.arange(108, 110)
+N_vals = np.arange(100, 10000, 100)
 angles = np.empty(N_vals.shape[0])
 for idx, N_val in enumerate(N_vals):
     print("Computing w angle for N: " + str(N_val) + " out of " + str(N_vals[-1]))
