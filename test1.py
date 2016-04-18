@@ -7,7 +7,7 @@ def get_CLI_parameters(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument("-l", "--loss_choice", default="categorical_crossentropy")
     parser.add_argument("--noise_scale", default=0.3, type=float)
-    parser.add_argument("-e", "--epochs", default=1000, type=int)
+    parser.add_argument("-e", "--epochs", default=100, type=int)
     parser.add_argument("-m", "--model", default="mlp")
     parser.add_argument("--layer_sizes", default="20, 20")
     parser.add_argument("-p", "--do_plotting", default=False)
@@ -494,81 +494,86 @@ def compute_w(X, network, params):
     return w
 
 
-#N_vals = np.arange(100, 300, 100)
-#angles = np.empty((params["n_classes"], N_vals.shape[0]))
-#for idx, N_val in enumerate(N_vals):
-#    print("Computing w angle for N: " + str(N_val) + " out of " + str(N_vals[-1]))
-#    params["N_train"] = N_val
-#    network, params = train_network(params)
+N_vals = np.arange(100, 300, 100)
+angles = np.empty((params["n_classes"], N_vals.shape[0]))
+for idx, N_val in enumerate(N_vals):
+    print("Computing w angle for N: " + str(N_val) + " out of " + str(N_vals[-1]))
+    params["N_train"] = N_val
+    network, params = train_network(params)
+
+    X_pos = np.array([0, 1])[na, :]
+    w = compute_w(X_pos, network, params)
+
+    def compute_angle(x, y):
+        if type(x) == int:
+            x = np.array([x])
+            y = np.array([y])
+        angles = np.empty(x.size)
+        for idx in range(x.size):
+            angle = np.arctan2(y[idx], x[idx])
+            if angle < 0:
+                angle += 2*np.pi
+            angles[idx] = angle
+        return angles
+
+    angles[:, idx] = compute_angle(w[:, 0], w[:, 1])
+
+results = {"N_vals": N_vals,
+           "angles": angles,
+           "params": params}
+pickle.dump(results, open(params["results_dir"] + "/angles.dump", "wb"))
+
+
+
+#network, params = train_network(params)
 #
-#    X_pos = np.array([0, 1])[na, :]
-#    w = compute_w(X_pos, network, params)
-#
-#    def compute_angle(x, y):
-#        angle = np.arctan2(y, x)
-#        if angle < 0:
-#            angle += 2*np.pi
-#        return angle
-#
-#    angles[0, idx] = compute_angle(w[0, 0], w[0, 1])
-#    angles[1, idx] = compute_angle(w[1, 0], w[1, 1])
+#X_pos = np.array([1, 0])[na, :]
+#w = compute_w(X_pos, network, params)
 #
 #
-#results = {"N_vals": N_vals,
-#           "angles": angles,
-#           "params": params}
-#pickle.dump(results, open(params["results_dir"] + "/angles.dump", "wb"))
-
-
-network, params = train_network(params)
-
-X_pos = np.array([1, 0])[na, :]
-w = compute_w(X_pos, network, params)
-
-
-
-length = 2
-my_linewidth = 3
-plt.figure()
-plt.plot([0, w[0, 0]], [0, w[0, 1]], linewidth=my_linewidth)
-plt.plot([0, w[1, 0]], [0, w[1, 1]], linewidth=my_linewidth)
-
-# create some data for scatterplot
-X, y = create_ring_data(params, params["N_train"])
-# create a mesh to plot in
-h = .01 # step size in the mesh
-x_min, x_max = -2, 2
-y_min, y_max = -2, 2
-xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
-                     np.arange(y_min, y_max, h))
-mesh = np.c_[xx.ravel(), yy.ravel()]
-
-Z = predict(mesh, network)
-
-# Put the result into a color plot
-Z = Z.reshape(xx.shape)
-plt.scatter(X[:,0], X[:,1], c=y, cmap="gray", s=40)
-plt.scatter(X_pos[0, 0], X_pos[0, 1], s = 200)
-plt.contour(xx, yy, Z, cmap="gray", alpha=0.8)
-plt.xlabel('x')
-plt.ylabel('y')
-plt.xlim(xx.min(), xx.max())
-plt.ylim(yy.min(), yy.max())
-
-
-# draw the analytical decision boundary
-n_centers = 10
-radius = 10
-additive_term = 2*np.pi / (2*n_centers)
-end_points = radius*np.array([[np.cos(i*2.*np.pi/n_centers + additive_term), np.sin(i*2.*np.pi/n_centers + additive_term)] for i in range(n_centers)])
-for idx in np.arange(n_centers):
-    plt.plot([0, end_points[idx, 0]], [0, end_points[idx, 1]], color="red", linewidth=2.0)
-plt.show()
-
-
-
-
-
+#
+#length = 2
+#my_linewidth = 3
+#plt.figure()
+#plt.plot([0, w[0, 0]], [0, w[0, 1]], linewidth=my_linewidth)
+#plt.plot([0, w[1, 0]], [0, w[1, 1]], linewidth=my_linewidth)
+#
+## create some data for scatterplot
+#X, y = create_ring_data(params, params["N_train"])
+## create a mesh to plot in
+#h = .01 # step size in the mesh
+#x_min, x_max = -2, 2
+#y_min, y_max = -2, 2
+#xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
+#                     np.arange(y_min, y_max, h))
+#mesh = np.c_[xx.ravel(), yy.ravel()]
+#
+#Z = predict(mesh, network)
+#
+## Put the result into a color plot
+#Z = Z.reshape(xx.shape)
+#plt.scatter(X[:,0], X[:,1], c=y, cmap="gray", s=40)
+#plt.scatter(X_pos[0, 0], X_pos[0, 1], s = 200)
+#plt.contour(xx, yy, Z, cmap="gray", alpha=0.8)
+#plt.xlabel('x')
+#plt.ylabel('y')
+#plt.xlim(xx.min(), xx.max())
+#plt.ylim(yy.min(), yy.max())
+#
+#
+## draw the analytical decision boundary
+#n_centers = 10
+#radius = 10
+#additive_term = 2*np.pi / (2*n_centers)
+#end_points = radius*np.array([[np.cos(i*2.*np.pi/n_centers + additive_term), np.sin(i*2.*np.pi/n_centers + additive_term)] for i in range(n_centers)])
+#for idx in np.arange(n_centers):
+#    plt.plot([0, end_points[idx, 0]], [0, end_points[idx, 1]], color="red", linewidth=2.0)
+#plt.show()
+#
+#
+#
+#
+#
 #
 #
 ## create another example
