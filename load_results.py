@@ -6,7 +6,7 @@ na = np.newaxis
 
 colors = ["blue", "red", "orange", "green"]
 
-simulation_name = "two_output_neurons"
+simulation_name = "big_datasets"
 resultfile = "angles.dump"
 resultpath = os.getcwd() + "/results/" + simulation_name + "/"
 resultpath
