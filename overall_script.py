@@ -17,12 +17,12 @@ import numpy as np
 import theano
 import theano.tensor as T
 theano.config.optimizer = "None"
-#theano.config.exception_verbosity="high"
 import lasagne
 import matplotlib
 if params["remote"]:
     matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 from sklearn.linear_model import LogisticRegression
 import copy
 import pickle
@@ -35,6 +35,8 @@ def transform_target(target, loss_choice):
     """
 
     if loss_choice == "categorical_crossentropy":
+        if np.amax(target) == 1:
+            return target
         target_vec = np.zeros((len(target), np.amax(target)+1))
         target_vec[range(len(target)), target] = 1
         return target_vec
@@ -166,7 +168,6 @@ def iterate_minibatches(inputs, targets, batchsize, shuffle=False):
 
 
 def train_network(params):
-
     X_train, y_train = create_data(params, params["N_train"])
     X_val, y_val = create_data(params, params["N_val"])
     X_test, y_test = create_data(params, params["N_test"])
@@ -241,8 +242,8 @@ def train_network(params):
     test_acc = T.mean(T.eq(prediction, target_var),
                     dtype=theano.config.floatX)
 
-    mypred = theano.function([input_var], prediction)
-    pdb.set_trace()
+#    mypred = theano.function([input_var], prediction)
+#    pdb.set_trace()
 
 
     params["input_var"] = input_var
@@ -334,6 +335,7 @@ def plot_heatmap(R_i, axis=None, title=""):
 def forward_pass(func_input, network, input_var):
     """
     IMPORTANT: THIS FUNCTION CAN ONLY BE CALLED WITH A SINGLE INPUT SAMPLE
+    the function expects a column vector
     """
     get_activations = theano.function([input_var],
                 lasagne.layers.get_output(lasagne.layers.get_all_layers(network)))
@@ -343,9 +345,9 @@ def forward_pass(func_input, network, input_var):
     if func_input.ndim == 1:
         activations = get_activations(np.expand_dims(func_input, axis=0))
     elif func_input.ndim == 2:
-        if func_input.shape[0] > 1:
+        if func_input.shape[1] > 1:
             raise("ERROR: only pass a single datapoint to forward_pass()!")
-        activations = get_activations(func_input)
+        activations = get_activations(func_input.T)
     elif activations.ndim > 2:
         raise("Input data had too many dimensions")
 
@@ -419,15 +421,18 @@ def manual_classification(X):
     return manual_prediction
 
 
-def predict(Xl, network):
+def predict(X, network, n_output_units):
     """ Predicts the class of the input
 
     Input
     X: [samples, features]
     """
-    get_predictions = theano.function([params["input_var"]], lasagne.layers.get_output(network))
-    output = get_predictions(X)
-    return np.argmax(output, axis=1)
+    get_output = theano.function([params["input_var"]], lasagne.layers.get_output(network))
+    output = get_output(X)
+    if n_output_units == 1:
+        return np.round(output)
+    else:
+        return np.argmax(output, axis=1)
 
 
 def compute_w(X, network, params):
@@ -466,17 +471,15 @@ def compute_w(X, network, params):
     for idx in range(1, len(S_mats)):
         s = np.dot(S_mats[idx], s)
 
-    X_ext = np.vstack((X.T, 1)).T # the double transpose is due to weird behavior of vstack
-    if not np.allclose(np.dot(s, X_ext.T), preactivations[-1]):
+    X_ext = np.vstack((X, 1)) # the double transpose is due to weird behavior of vstack
+    if not np.allclose(np.dot(s, X_ext), preactivations[-1]):
         # checking whether the computed w gives the same result as the network
         # gave
         raise("There was an error computing the weight vector")
 
     w = s[:, :-1]
-    w[0] /= np.linalg.norm(w[0])
-    w[1] /= np.linalg.norm(w[1])
 
-    return w
+    return w.T
 
 
 
@@ -484,16 +487,23 @@ def compute_w(X, network, params):
 network, params = train_network(params)
 get_output = theano.function([params["input_var"]], lasagne.layers.get_output(network))
 
-X_pos = np.array([1, 0])[na, :]
-w = compute_w(X_pos, network, params)
+# create a mesh to plot in
+h = .2 # step size in the mesh
+x_min, x_max = -2, 2
+y_min, y_max = -2, 2
+xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
+                     np.arange(y_min, y_max, h))
+mesh = np.c_[xx.ravel(), yy.ravel()]
 
-
-
-length = 2
-my_linewidth = 3
 plt.figure()
-plt.plot([0, w[0, 0]], [0, w[0, 1]], linewidth=my_linewidth)
-plt.plot([0, w[1, 0]], [0, w[1, 1]], linewidth=my_linewidth)
+my_linewidth = 1.5
+shorten_w = 40
+for idx in range(len(mesh)):
+    if idx%100 == 0:
+        print("Computing weight vector nr " + str(idx) + " out of " + str(len(mesh)))
+    X_pos = mesh[idx][:, na]
+    w = compute_w(X_pos, network, params) / shorten_w
+    plt.plot([X_pos[0], X_pos[0] + w[0]], [X_pos[1], X_pos[1] + w[1]], linewidth=my_linewidth, color="blue")
 
 # create some data for scatterplot
 X, y = create_ring_data(params, params["N_train"])
@@ -505,13 +515,17 @@ xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
                      np.arange(y_min, y_max, h))
 mesh = np.c_[xx.ravel(), yy.ravel()]
 
-Z = predict(mesh, network)
+Z = predict(mesh, network, params["n_output_units"])
+output = lasagne.layers.get_output(network)
+get_output = theano.function([params["input_var"]], output)
+Z = get_output(mesh)
 
 # Put the result into a color plot
 Z = Z.reshape(xx.shape)
+
 plt.scatter(X[:,0], X[:,1], c=y, cmap="gray", s=40)
-plt.scatter(X_pos[0, 0], X_pos[0, 1], s = 200)
-plt.contour(xx, yy, Z, cmap="gray", alpha=0.8)
+plt.imshow(Z, interpolation="bilinear", cmap=cm.gray, alpha=0.8,
+           extent=[x_min, x_max, y_min, y_max])
 plt.xlabel('x')
 plt.ylabel('y')
 plt.xlim(xx.min(), xx.max())

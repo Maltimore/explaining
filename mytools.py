@@ -17,10 +17,11 @@ def get_CLI_parameters(argv):
     parser.add_argument("-e", "--epochs", default=100, type=int)
     parser.add_argument("-m", "--model", default="mlp")
     parser.add_argument("--layer_sizes", default="20, 20")
-    parser.add_argument("-p", "--do_plotting", default=False)
+    parser.add_argument("-p", "--do_plotting", default=True)
     parser.add_argument("--verbose", default=False)
     parser.add_argument("-d", "--data", default="ring")
     parser.add_argument("-c", "--n_classes", default="2", type=int)
+    parser.add_argument("--n_output_units", default="1", type=int)
     parser.add_argument("-b", "--bias_in_data", default=False)
     parser.add_argument("-r", "--remote", default=False)
     parser.add_argument("-n", "--name", default="default")
@@ -31,9 +32,8 @@ def get_CLI_parameters(argv):
     params["N_test"] = 200
     params["minibatch_size"] = 30
     params["input_dim"] = 2
-    params["output_neuron"] = 1 # for which output neuron to compute the
-                                # relevance (choice 0..3)
-    params["dataset"] = 2 # which dataset to use (choice 0..3)
+    params["output_neuron"] = 1
+    params["dataset"] = 2
 
     # extract layer sizes from input string
     layer_list = []
