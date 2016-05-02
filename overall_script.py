@@ -17,6 +17,8 @@ import time
 import numpy as np
 import theano
 import theano.tensor as T
+theano.config.optimizer = "None"
+#theano.config.exception_verbosity="high"
 import lasagne
 import matplotlib
 if params["remote"]:
@@ -245,7 +247,7 @@ def train_network(params):
     # Compile a second function computing the validation loss and accuracy:
     val_fn = theano.function([input_var, target_var], [test_loss, test_acc])
 
-#    import pdb; pdb.set_trace()
+    import pdb; pdb.set_trace()
 
     # Finally, launch the training loop.
     print("Starting training...")
