@@ -12,7 +12,7 @@ def softmax(x):
 def get_CLI_parameters(argv):
     # command line interface
     parser = argparse.ArgumentParser()
-    parser.add_argument("-l", "--loss_choice", default="MSE")
+    parser.add_argument("-l", "--loss_choice", default="categorical_crossentropy")
     parser.add_argument("--noise_scale", default=0.3, type=float)
     parser.add_argument("-e", "--epochs", default=100, type=int)
     parser.add_argument("-m", "--model", default="mlp")
@@ -20,7 +20,7 @@ def get_CLI_parameters(argv):
     parser.add_argument("-p", "--do_plotting", default=False)
     parser.add_argument("--verbose", default=False)
     parser.add_argument("-d", "--data", default="ring")
-    parser.add_argument("-c", "--n_classes", default="3", type=int)
+    parser.add_argument("-c", "--n_classes", default="2", type=int)
     parser.add_argument("-b", "--bias_in_data", default=False)
     parser.add_argument("-r", "--remote", default=False)
     parser.add_argument("-n", "--name", default="default")

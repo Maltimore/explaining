@@ -3,13 +3,12 @@ import sys
 import os
 import importlib
 import mytools
-from mytools import *
 importlib.reload(mytools)
 
 if __name__ == "__main__" and "-f" not in sys.argv:
-    params = get_CLI_parameters(sys.argv)
+    params = mytools.get_CLI_parameters(sys.argv)
 else:
-    params = get_CLI_parameters("".split())
+    params = mytools.get_CLI_parameters("".split())
 
 # the import statements aren't all at the beginning because some things are
 # imported based on the command line inputs
@@ -27,16 +26,20 @@ import matplotlib.pyplot as plt
 from sklearn.linear_model import LogisticRegression
 import copy
 import pickle
+import pdb
 na = np.newaxis
 
 def transform_target(target, loss_choice):
     """ Transforms the target from an int value to other target choices
         like one-hot
     """
+
     if loss_choice == "categorical_crossentropy":
-        return target
+        target_vec = np.zeros((len(target), np.amax(target)+1))
+        target_vec[range(len(target)), target] = 1
+        return target_vec
     elif loss_choice == "MSE":
-        target_vec = np.ones((len(target), 4)) * (-1)
+        target_vec = np.ones((len(target), np.amax(target)+1)) * (-1)
         target_vec[range(len(target)), target] = 1
         return target_vec
 
@@ -90,7 +93,7 @@ def create_ring_data(params, N):
     class_means = radius*np.array([[np.cos(i*2.*np.pi/n_centers),np.sin(i*2.*np.pi/n_centers)] for i in range(n_centers)])
 
     X = np.empty((n_centers * n_per_center, params["input_dim"]))
-    y = np.empty(n_centers * n_per_center, dtype=np.int32)
+    y = np.empty((n_centers * n_per_center, 1), dtype=np.int32)
     idx = 0
     while idx < n_centers:
         curr_data = np.random.multivariate_normal((0,0), C, size=n_per_center) + class_means[idx, :]
@@ -132,6 +135,7 @@ def build_mlp(params, input_var=None):
     # Output layer
     if params["loss_choice"] == "categorical_crossentropy":
         if params["n_classes"] == 2:
+            print("Binary classification problem detected, using one output neuron")
             l_out = lasagne.layers.DenseLayer(
                     current_layer, num_units=1,
                     nonlinearity=lasagne.nonlinearities.sigmoid,
@@ -173,17 +177,17 @@ def train_network(params):
     if params["loss_choice"] == "categorical_crossentropy":
         # Prepare Theano variables for inputs and targets
         input_var = T.matrix('inputs')
-        target_var = T.ivector('targets')
+        target_var = T.matrix('targets')
 
         print("Building model and compiling functions...")
         if params["model"] == 'mlp':
             network = build_mlp(params, input_var)
 
-        prediction = lasagne.layers.get_output(network)
+        output = lasagne.layers.get_output(network)
         if params["n_classes"] == 2:
-            loss = lasagne.objectives.binary_crossentropy(prediction, target_var)
+            loss = lasagne.objectives.binary_crossentropy(output, target_var)
         else:
-            loss = lasagne.objectives.categorical_crossentropy(prediction, target_var)
+            loss = lasagne.objectives.categorical_crossentropy(output, target_var)
         loss = loss.mean()
 
         # Create update expressions for training, i.e., how to modify the
@@ -196,14 +200,10 @@ def train_network(params):
         # Create a loss expression for validation/testing. The crucial difference
         # here is that we do a deterministic forward pass through the network,
         # disabling dropout layers.
-        test_prediction = lasagne.layers.get_output(network, deterministic=True)
-        test_loss = lasagne.objectives.categorical_crossentropy(test_prediction,
+        test_loss = lasagne.objectives.categorical_crossentropy(output,
                                                                 target_var)
         test_loss = test_loss.mean()
 
-        # As a bonus, also create an expression for the classification accuracy:
-        test_acc = T.mean(T.eq(T.argmax(test_prediction, axis=1), target_var),
-                        dtype=theano.config.floatX)
 
     if params["loss_choice"] == "MSE":
         # Prepare Theano variables for inputs and targets
@@ -214,9 +214,9 @@ def train_network(params):
         if params["model"] == 'mlp':
             network = build_mlp(params, input_var)
 
-        prediction = lasagne.layers.get_output(network)
+        output = lasagne.layers.get_output(network)
 
-        loss = lasagne.objectives.squared_error(prediction, target_var)
+        loss = lasagne.objectives.squared_error(output, target_var)
         loss = loss.mean()
 
         # Create update expressions for training, i.e., how to modify the
@@ -229,13 +229,21 @@ def train_network(params):
         # Create a loss expression for validation/testing. The crucial difference
         # here is that we do a deterministic forward pass through the network,
         # disabling dropout layers.
-        test_prediction = lasagne.layers.get_output(network, deterministic=True)
-        test_loss = lasagne.objectives.squared_error(test_prediction,
-                                                        target_var)
+        test_loss = lasagne.objectives.squared_error(output, target_var)
         test_loss = test_loss.mean()
 
-        test_acc = T.mean(T.eq(T.argmax(test_prediction, axis=1), T.argmax(target_var, axis=1)),
-                        dtype=theano.config.floatX)
+
+    if params["n_classes"] == 2:
+        prediction = T.round(output)
+    else:
+        prediction = T.shape_padaxis(T.argmax(output, axis=1), 1)
+    # As a bonus, also create an expression for the classification accuracy:
+    test_acc = T.mean(T.eq(prediction, target_var),
+                    dtype=theano.config.floatX)
+
+    mypred = theano.function([input_var], prediction)
+    pdb.set_trace()
+
 
     params["input_var"] = input_var
     params["target_var"] = target_var
@@ -246,8 +254,6 @@ def train_network(params):
 
     # Compile a second function computing the validation loss and accuracy:
     val_fn = theano.function([input_var, target_var], [test_loss, test_acc])
-
-    import pdb; pdb.set_trace()
 
     # Finally, launch the training loop.
     print("Starting training...")
