@@ -497,13 +497,20 @@ mesh = np.c_[xx.ravel(), yy.ravel()]
 
 plt.figure()
 my_linewidth = 1.5
-shorten_w = 40
+shorten_w = 5
+all_vecs = np.empty((len(mesh), 4))
 for idx in range(len(mesh)):
     if idx%100 == 0:
         print("Computing weight vector nr " + str(idx) + " out of " + str(len(mesh)))
     X_pos = mesh[idx][:, na]
-    w = compute_w(X_pos, network, params) / shorten_w
-    plt.plot([X_pos[0], X_pos[0] + w[0]], [X_pos[1], X_pos[1] + w[1]], linewidth=my_linewidth, color="blue")
+    w = compute_w(X_pos, network, params)
+    w /= (np.linalg.norm(w) * shorten_w)
+    all_vecs[idx, 0] = X_pos[0]
+    all_vecs[idx, 1] = X_pos[1]
+    all_vecs[idx, 2] = w[0]
+    all_vecs[idx, 3] = w[1]
+#    plt.plot([X_pos[0], X_pos[0] + w[0]], [X_pos[1], X_pos[1] + w[1]], linewidth=my_linewidth, color="blue")
+plt.quiver(all_vecs[:, 0], all_vecs[:, 1], all_vecs[:, 2], all_vecs[:, 3], scale=None)
 
 # create some data for scatterplot
 X, y = create_ring_data(params, params["N_train"])
@@ -524,7 +531,7 @@ Z = get_output(mesh)
 Z = Z.reshape(xx.shape)
 
 plt.scatter(X[:,0], X[:,1], c=y, cmap="gray", s=40)
-plt.imshow(Z, interpolation="bilinear", cmap=cm.gray, alpha=0.8,
+plt.imshow(Z, interpolation="nearest", cmap=cm.gray, alpha=0.4,
            extent=[x_min, x_max, y_min, y_max])
 plt.xlabel('x')
 plt.ylabel('y')
