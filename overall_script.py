@@ -583,20 +583,9 @@ for output_neuron in np.arange(4):
     plot_heatmap(coefs[output_neuron], axes[output_neuron], title=title)
 #    plt.savefig(open(params["plots_dir"] + "/coefs.png", "w"), dpi=400)
 
-W = LogReg.coef_.T
-W.shape
-# normalize W
-W = np.divide(W, np.linalg.norm(W, axis=0))
-A = np.divide(A, np.linalg.norm(A, axis=0))
+# plot the result of W.T @ A (the patterns)
 plot_heatmap(np.dot(W.T, A[:, :4]))
 np.dot(W.T, A[:, :4])
-A.shape
-plt.show()
-np.linalg.norm(W[:,0])
-np.linalg.norm(A[:,0])
-LogReg.intercept_
-
-
 # plot one of the distractor patterns
 y_distractor = np.array([[0,0,0,0,0,0,0,1]]).T
 X_distractor = np.dot(A, y_distractor)
