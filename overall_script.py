@@ -55,32 +55,91 @@ def create_data(params, N):
         raise("Requested datatype unknown")
 
 
-def create_horseshoe_data(params, N):
+def get_horseshoe_pattern(horseshoe_distractors):
+    if horseshoe_distractors:
+        A = np.empty((params["input_dim"], 8))
+    else:
+        A = np.empty((params["input_dim"], 4))
+
+    # create the patterns for the actual classes
     pic = np.zeros((10, 10))
     pic[3:7, 2] = 1
     pic[3:7, 7] = 1
     pic[2, 3:7] = 1
     pic[7, 3:7] = 1
-    overall_idx = 0
-    X = np.empty((N, params["input_dim"]))
-    y = np.empty(N, dtype=np.int32)
-    while overall_idx < N:
-        for target in np.arange(4):
-            current_pic = pic.copy()
-            if target == 0:
-                current_pic[2:8, 2] = 0
-            elif target == 1:
-                current_pic[2:8, 7] = 0
-            elif target == 2:
-                current_pic[2, 2:8] = 0
-            elif target == 3:
-                current_pic[7, 2:8] = 0
-            current_pic += (np.random.normal(size=(10, 10))*params["noise_scale"])
-            X[overall_idx, :] = np.reshape(current_pic, (-1))
-            y[overall_idx] = target
-            overall_idx += 1
-            if overall_idx >= N:
-                break
+    for target in np.arange(4):
+        current_pic = pic.copy()
+        if target == 0:
+            current_pic[2:8, 2] = 0
+        elif target == 1:
+            current_pic[2:8, 7] = 0
+        elif target == 2:
+            current_pic[2, 2:8] = 0
+        elif target == 3:
+            current_pic[7, 2:8] = 0
+        A[:, target] = current_pic.flatten()
+
+    if not horseshoe_distractors:
+        return A
+
+    # create the patterns for the distractors
+    pic = np.zeros((10, 10))
+    pic[4, 2] = 1
+    pic[3, 3] = 1
+    pic[2, 4] = 1
+    pic[2, 5] = 1
+    pic[3, 6] = 1
+    pic[4, 7] = 1
+    pic[5, 7] = 1
+    pic[6, 6] = 1
+    pic[7, 5] = 1
+    pic[7, 4] = 1
+    pic[6, 3] = 1
+    pic[5, 2] = 1
+    for distractor in np.arange(4, 8):
+        current_pic = pic.copy()
+        if distractor == 4:
+            current_pic[4, 2] = 0
+            current_pic[3, 3] = 0
+            current_pic[2, 4] = 0
+        elif distractor == 5:
+            current_pic[2, 5] = 0
+            current_pic[3, 6] = 0
+            current_pic[4, 7] = 0
+        elif distractor == 6:
+            current_pic[5, 7] = 0
+            current_pic[6, 6] = 0
+            current_pic[7, 5] = 0
+        elif distractor == 7:
+            current_pic[7, 4] = 0
+            current_pic[6, 3] = 0
+            current_pic[5, 2] = 0
+        A[:, distractor] = current_pic.flatten()
+
+    return A
+
+
+def create_horseshoe_data(params, N):
+    A = get_horseshoe_pattern(params["horseshoe_distractors"])
+    if params["horseshoe_distractors"]:
+        y = np.zeros((8, N))
+        y[np.random.randint(low=4, size=N), range(N)] = 1
+        y[np.random.randint(low=4, high=8, size=N), range(N)] = 1
+    else:
+        y = np.zeros((4, N))
+        y[np.random.randint(4, size=N), range(N)] = 1
+
+    # create X by multiplying the target vector with the patterns,
+    # and tranpose because we want the data to be in [samples, features] form
+    X = np.dot(A, y).T
+
+    for idx in range(X.shape[0]):
+        X[idx, :] += (np.random.normal(size=(100))*params["noise_scale"])
+
+
+    y = np.argmax(y, axis=0)[:, na]
+    y = y.astype(np.int32)
+
     return X, y
 
 
@@ -484,69 +543,80 @@ def compute_w(X, network, params):
 
 
 
-network, params = train_network(params)
-get_output = theano.function([params["input_var"]], lasagne.layers.get_output(network))
+params["horseshoe_distractors"] = True
+A = get_horseshoe_pattern(params["horseshoe_distractors"])
+#network, params = train_network(params)
+#get_output = theano.function([params["input_var"]], lasagne.layers.get_output(network))
 
-# create a mesh to plot in
-h = .2 # step size in the mesh
-x_min, x_max = -2, 2
-y_min, y_max = -2, 2
-xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
-                     np.arange(y_min, y_max, h))
-mesh = np.c_[xx.ravel(), yy.ravel()]
-
-plt.figure()
-my_linewidth = 1.5
-shorten_w = 5
-all_vecs = np.empty((len(mesh), 4))
-for idx in range(len(mesh)):
-    if idx%100 == 0:
-        print("Computing weight vector nr " + str(idx) + " out of " + str(len(mesh)))
-    X_pos = mesh[idx][:, na]
-    w = compute_w(X_pos, network, params)
-    w /= (np.linalg.norm(w) * shorten_w)
-    all_vecs[idx, 0] = X_pos[0]
-    all_vecs[idx, 1] = X_pos[1]
-    all_vecs[idx, 2] = w[0]
-    all_vecs[idx, 3] = w[1]
-#    plt.plot([X_pos[0], X_pos[0] + w[0]], [X_pos[1], X_pos[1] + w[1]], linewidth=my_linewidth, color="blue")
-plt.quiver(all_vecs[:, 0], all_vecs[:, 1], all_vecs[:, 2], all_vecs[:, 3], scale=None)
-
-# create some data for scatterplot
-X, y = create_ring_data(params, params["N_train"])
-# create a mesh to plot in
-h = .01 # step size in the mesh
-x_min, x_max = -2, 2
-y_min, y_max = -2, 2
-xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
-                     np.arange(y_min, y_max, h))
-mesh = np.c_[xx.ravel(), yy.ravel()]
-
-Z = predict(mesh, network, params["n_output_units"])
-output = lasagne.layers.get_output(network)
-get_output = theano.function([params["input_var"]], output)
-Z = get_output(mesh)
-
-# Put the result into a color plot
-Z = Z.reshape(xx.shape)
-
-plt.scatter(X[:,0], X[:,1], c=y, cmap="gray", s=40)
-plt.imshow(Z, interpolation="nearest", cmap=cm.gray, alpha=0.4,
-           extent=[x_min, x_max, y_min, y_max])
-plt.xlabel('x')
-plt.ylabel('y')
-plt.xlim(xx.min(), xx.max())
-plt.ylim(yy.min(), yy.max())
+# create another example
+#X, y = create_data(params, 4)
+#
+#fig, axes = plt.subplots(1, 5, figsize=(15, 10))
+## first plotting the input image
+#title = "Input image"
+#X_withdims = np.reshape(X[params["dataset"]], (10, 10))
+#plot_heatmap(X_withdims, y[params["dataset"]], axis=axes[0], title=title)
+#for output_neuron in np.arange(4):
+#    title = get_target_title(output_neuron)
+#    X[params["dataset"]].shape
+#    R = compute_relevance(X[params["dataset"]], network, output_neuron, params)
+#    plot_heatmap(R, output_neuron, axes[output_neuron+1], title)
+#    plt.subplots_adjust(wspace=.5)
+#    plt.savefig(open("relevance.png", "w"))
 
 
-# draw the analytical decision boundary
-#n_centers = 10
-#radius = 10
-#additive_term = 2*np.pi / (2*n_centers)
-#end_points = radius*np.array([[np.cos(i*2.*np.pi/n_centers + additive_term), np.sin(i*2.*np.pi/n_centers + additive_term)] for i in range(n_centers)])
-#for idx in np.arange(n_centers):
-#    plt.plot([0, end_points[idx, 0]], [0, end_points[idx, 1]], color="red", linewidth=2.0)
-#plt.show()
+####### logistic regression
+print("Performing Logistic Regression")
+X_train, y_train = create_data(params, params["N_train"])
+LogReg = LogisticRegression()
+LogReg.fit(X_train, np.ravel(y_train))
+coefs = LogReg.coef_
+coefs = np.reshape(coefs, (coefs.shape[0], 10,-1))
+print("Finished Logistic Regression")
+
+# plot a random input sample
+plot_heatmap(X_train[0].reshape((10, 10)), title="training image")
+
+fig, axes = plt.subplots(1, 4, figsize=(15, 10))
+for output_neuron in np.arange(4):
+    title = get_target_title(output_neuron)
+    plot_heatmap(coefs[output_neuron], axes[output_neuron], title=title)
+#    plt.savefig(open(params["plots_dir"] + "/coefs.png", "w"), dpi=400)
+
+W = LogReg.coef_.T
+W.shape
+# normalize W
+W = np.divide(W, np.linalg.norm(W, axis=0))
+A = np.divide(A, np.linalg.norm(A, axis=0))
+plot_heatmap(np.dot(W.T, A[:, :4]))
+np.dot(W.T, A[:, :4])
+A.shape
+plt.show()
+np.linalg.norm(W[:,0])
+np.linalg.norm(A[:,0])
+LogReg.intercept_
+
+
+# plot one of the distractor patterns
+y_distractor = np.array([[0,0,0,0,0,0,0,1]]).T
+X_distractor = np.dot(A, y_distractor)
+plot_heatmap(X_distractor.reshape((10,10)))
+plt.show()
+
+# comparing manual classification with network output
+#X, y = create_data(params, 200)
+
+#manual_output = manual_classification(X)
+#manual_score = np.sum(manual_output == y)
+#network_output = lasagne.layers.get_output(network)
+#get_network_output = theano.function([params["input_var"]], network_output)
+#network_prediction = np.argmax(get_network_output(X), axis=1)
+#network_score = np.sum(network_prediction == y)
+#logreg_prediction = LogReg.predict(np.reshape(X, (len(X),100)))
+#logreg_score = np.sum(logreg_prediction ==y)
+#print("Manual classification score: " + str(manual_score))
+#print("Network classification score: " + str(network_score))
+#print("LogReg classification score: " + str(logreg_score))
 
 
 if params["do_plotting"]:
