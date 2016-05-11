@@ -133,7 +133,7 @@ def create_horseshoe_data(params, N):
     A = get_horseshoe_pattern(params["horseshoe_distractors"])
     if params["horseshoe_distractors"]:
         y = np.zeros((8, N))
-        y[np.random.randint(low=4, size=N), range(N)] = 1
+        y[np.random.randint(4, size=N), range(N)] = 1
         y[np.random.randint(low=4, high=8, size=N), range(N)] = 1
     else:
         y = np.zeros((4, N))
@@ -604,16 +604,15 @@ X_distractor = np.dot(A, y_distractor)
 plot_heatmap(X_distractor.reshape((10,10)))
 
 # get A via Haufe method
-y = transform_target(y_train.squeeze(), "categorical_crossentropy")
+y = one_hot_encoding(y_train.squeeze())
 Sigma_s = np.cov(y.T)
 Sigma_X = np.cov(X_train.T)
 A_haufe = np.dot(np.dot(Sigma_X, W), Sigma_s)
-A_haufe.shape
 
 # check whether the input data looks correct
-y_class = np.array([[1,0,0,0,0,0,0,0]]).T
-X_class = np.dot(A, y_class)
-plot_heatmap(X_class.reshape((10,10)))
+#y_class = np.array([[1,0,0,0,0,0,0,0]]).T
+#X_class = np.dot(A, y_class)
+#plot_heatmap(X_class.reshape((10,10)))
 
 fig, axes = plt.subplots(1, 3, figsize=(15, 10))
 plot_heatmap(A[:, 0].reshape((10, 10)), axis=axes[0], title="true A")
