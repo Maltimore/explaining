@@ -29,21 +29,31 @@ import pickle
 import pdb
 na = np.newaxis
 
+def one_hot_encoding(target):
+    """ IMPORTANT: if there are only two classes, this doesn't return a
+        one hot encoding but instead just leaves the target vector as is
+    """
+    if np.amax(target) == 1:
+        return target
+    target_vec = np.zeros((len(target), np.amax(target)+1))
+    target_vec[range(len(target)), target] = 1
+    return target_vec
+
+
+def one_minus_one_encoding(target):
+    target_vec = np.ones((len(target), np.amax(target)+1)) * (-1)
+    target_vec[range(len(target)), target] = 1
+    return target_vec
+
+
 def transform_target(target, loss_choice):
     """ Transforms the target from an int value to other target choices
         like one-hot
     """
-
     if loss_choice == "categorical_crossentropy":
-        if np.amax(target) == 1:
-            return target
-        target_vec = np.zeros((len(target), np.amax(target)+1))
-        target_vec[range(len(target)), target] = 1
-        return target_vec
+        return one_hot_encoding(target)
     elif loss_choice == "MSE":
-        target_vec = np.ones((len(target), np.amax(target)+1)) * (-1)
-        target_vec[range(len(target)), target] = 1
-        return target_vec
+        return one_minus_one_encoding(target)
 
 
 def create_data(params, N):
@@ -584,12 +594,31 @@ for output_neuron in np.arange(4):
 #    plt.savefig(open(params["plots_dir"] + "/coefs.png", "w"), dpi=400)
 
 # plot the result of W.T @ A (the patterns)
+W = LogReg.coef_.T
 plot_heatmap(np.dot(W.T, A[:, :4]))
-np.dot(W.T, A[:, :4])
+
+
 # plot one of the distractor patterns
 y_distractor = np.array([[0,0,0,0,0,0,0,1]]).T
 X_distractor = np.dot(A, y_distractor)
 plot_heatmap(X_distractor.reshape((10,10)))
+
+# get A via Haufe method
+y = transform_target(y_train.squeeze(), "categorical_crossentropy")
+Sigma_s = np.cov(y.T)
+Sigma_X = np.cov(X_train.T)
+A_haufe = np.dot(np.dot(Sigma_X, W), Sigma_s)
+A_haufe.shape
+
+# check whether the input data looks correct
+y_class = np.array([[1,0,0,0,0,0,0,0]]).T
+X_class = np.dot(A, y_class)
+plot_heatmap(X_class.reshape((10,10)))
+
+fig, axes = plt.subplots(1, 3, figsize=(15, 10))
+plot_heatmap(A[:, 0].reshape((10, 10)), axis=axes[0], title="true A")
+plot_heatmap(W[:, 0].reshape((10, 10)), axis=axes[1], title="LogReg weights")
+plot_heatmap(A_haufe[:, 0].reshape((10, 10)), axis=axes[2], title="A haufe")
 plt.show()
 
 # comparing manual classification with network output
