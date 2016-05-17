@@ -553,8 +553,23 @@ def compute_w(X, network, params):
 
 
 
-params["horseshoe_distractors"] = True
-A = get_horseshoe_pattern(params["horseshoe_distractors"])
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#params["horseshoe_distractors"] = True
+#A = get_horseshoe_pattern(params["horseshoe_distractors"])
 #network, params = train_network(params)
 #get_output = theano.function([params["input_var"]], lasagne.layers.get_output(network))
 
@@ -575,50 +590,50 @@ A = get_horseshoe_pattern(params["horseshoe_distractors"])
 #    plt.savefig(open("relevance.png", "w"))
 
 
-####### logistic regression
-print("Performing Logistic Regression")
-X_train, y_train = create_data(params, params["N_train"])
-LogReg = LogisticRegression()
-LogReg.fit(X_train, np.ravel(y_train))
-coefs = LogReg.coef_
-coefs = np.reshape(coefs, (coefs.shape[0], 10,-1))
-print("Finished Logistic Regression")
-
-# plot a random input sample
-plot_heatmap(X_train[0].reshape((10, 10)), title="training image")
-
-fig, axes = plt.subplots(1, 4, figsize=(15, 10))
-for output_neuron in np.arange(4):
-    title = get_target_title(output_neuron)
-    plot_heatmap(coefs[output_neuron], axes[output_neuron], title=title)
-#    plt.savefig(open(params["plots_dir"] + "/coefs.png", "w"), dpi=400)
-
-# plot the result of W.T @ A (the patterns)
-W = LogReg.coef_.T
-plot_heatmap(np.dot(W.T, A[:, :4]))
-
-
+######## logistic regression
+#print("Performing Logistic Regression")
+#X_train, y_train = create_data(params, params["N_train"])
+#LogReg = LogisticRegression()
+#LogReg.fit(X_train, np.ravel(y_train))
+#coefs = LogReg.coef_
+#coefs = np.reshape(coefs, (coefs.shape[0], 10,-1))
+#print("Finished Logistic Regression")
+#
+## plot a random input sample
+#plot_heatmap(X_train[0].reshape((10, 10)), title="training image")
+#
+#fig, axes = plt.subplots(1, 4, figsize=(15, 10))
+#for output_neuron in np.arange(4):
+#    title = get_target_title(output_neuron)
+#    plot_heatmap(coefs[output_neuron], axes[output_neuron], title=title)
+##    plt.savefig(open(params["plots_dir"] + "/coefs.png", "w"), dpi=400)
+#
+## plot the result of W.T @ A (the patterns)
+#W = LogReg.coef_.T
+#plot_heatmap(np.dot(W.T, A[:, :4]))
+#
+#
 # plot one of the distractor patterns
-y_distractor = np.array([[0,0,0,0,0,0,0,1]]).T
-X_distractor = np.dot(A, y_distractor)
-plot_heatmap(X_distractor.reshape((10,10)))
-
+#y_distractor = np.array([[0,0,0,0,0,0,0,1]]).T
+#X_distractor = np.dot(A, y_distractor)
+#plot_heatmap(X_distractor.reshape((10,10)))
+#
 # get A via Haufe method
-y = one_hot_encoding(y_train.squeeze())
-Sigma_s = np.cov(y.T)
-Sigma_X = np.cov(X_train.T)
-A_haufe = np.dot(np.dot(Sigma_X, W), Sigma_s)
+#y = one_hot_encoding(y_train.squeeze())
+#Sigma_s = np.cov(y.T)
+#Sigma_X = np.cov(X_train.T)
+#A_haufe = np.dot(np.dot(Sigma_X, W), Sigma_s)
 
 # check whether the input data looks correct
 #y_class = np.array([[1,0,0,0,0,0,0,0]]).T
 #X_class = np.dot(A, y_class)
 #plot_heatmap(X_class.reshape((10,10)))
 
-fig, axes = plt.subplots(1, 3, figsize=(15, 10))
-plot_heatmap(A[:, 0].reshape((10, 10)), axis=axes[0], title="true A")
-plot_heatmap(W[:, 0].reshape((10, 10)), axis=axes[1], title="LogReg weights")
-plot_heatmap(A_haufe[:, 0].reshape((10, 10)), axis=axes[2], title="A haufe")
-plt.show()
+#fig, axes = plt.subplots(1, 3, figsize=(15, 10))
+#plot_heatmap(A[:, 0].reshape((10, 10)), axis=axes[0], title="true A")
+#plot_heatmap(W[:, 0].reshape((10, 10)), axis=axes[1], title="LogReg weights")
+#plot_heatmap(A_haufe[:, 0].reshape((10, 10)), axis=axes[2], title="A haufe")
+#plt.show()
 
 # comparing manual classification with network output
 #X, y = create_data(params, 200)
