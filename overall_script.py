@@ -29,40 +29,41 @@ import pickle
 import pdb
 na = np.newaxis
 
-def one_hot_encoding(target):
+def one_hot_encoding(target, n_classes):
     """ IMPORTANT: if there are only two classes, this doesn't return a
         one hot encoding but instead just leaves the target vector as is
     """
-    if np.amax(target) == 1:
+    if n_classes == 1:
         return target
-    target_vec = np.zeros((len(target), np.amax(target)+1))
+    target_vec = np.zeros((len(target), n_classes))
+    target_vec[range(len(target)), target.flatten()] = 1
+    return target_vec
+
+
+def one_minus_one_encoding(target, n_classes):
+    target_vec = np.ones((len(target), n_classes)) * (-1)
     target_vec[range(len(target)), target] = 1
     return target_vec
 
 
-def one_minus_one_encoding(target):
-    target_vec = np.ones((len(target), np.amax(target)+1)) * (-1)
-    target_vec[range(len(target)), target] = 1
-    return target_vec
-
-
-def transform_target(target, loss_choice):
+def transform_target(target, params):
     """ Transforms the target from an int value to other target choices
         like one-hot
     """
-    if loss_choice == "categorical_crossentropy":
-        return one_hot_encoding(target)
-    elif loss_choice == "MSE":
-        return one_minus_one_encoding(target)
+    if params["loss_choice"] == "categorical_crossentropy":
+        return one_hot_encoding(target, params["n_classes"])
+    elif params["loss_choice"] == "MSE":
+        return one_minus_one_encoding(target, params["n_classes"])
 
 
-def create_data(params, N):
-    if params["data"] == "horseshoe":
-        return create_horseshoe_data(params, N)
-    elif params["data"] == "ring":
-        return create_ring_data(params, N)
-    else:
-        raise("Requested datatype unknown")
+def data_with_dims(X, input_shape):
+    """ Restores the dimensions of the flattened data
+        this assumes that the original data are 2-d."""
+    X = X.reshape((X.shape[0],
+                   1,
+                   input_shape[0],
+                   input_shape[1]))
+    return X
 
 
 def get_horseshoe_pattern(horseshoe_distractors):
@@ -127,6 +128,15 @@ def get_horseshoe_pattern(horseshoe_distractors):
         A[:, distractor] = current_pic.flatten()
 
     return A
+
+
+def create_data(params, N):
+    if params["data"] == "horseshoe":
+        return create_horseshoe_data(params, N)
+    elif params["data"] == "ring":
+        return create_ring_data(params, N)
+    else:
+        raise("Requested datatype unknown")
 
 
 def create_horseshoe_data(params, N):
@@ -223,6 +233,34 @@ def build_mlp(params, input_var=None):
     return l_out
 
 
+def build_cnn(params, input_var):
+    # Input layer
+    current_layer = lasagne.layers.InputLayer(shape=(None,
+                                                    1,
+                                                    params["input_shape"][0],
+                                                    params["input_shape"][1]),
+                                            input_var=input_var)
+    # Hidden layers
+    n_filters = 5
+    current_layer = lasagne.layers.Conv2DLayer(current_layer,
+                        num_filters=n_filters,
+                        filter_size=(3, 3),
+                        pad="same",
+                        nonlinearity=lasagne.nonlinearities.rectify)
+
+    current_layer = lasagne.layers.Conv2DLayer(current_layer,
+                        num_filters=n_filters,
+                        filter_size=(3, 3),
+                        pad="same",
+                        nonlinearity=lasagne.nonlinearities.rectify)
+
+    # Output layer
+    l_out = lasagne.layers.DenseLayer(
+            current_layer, num_units=params["n_classes"],
+            nonlinearity=lasagne.nonlinearities.softmax)
+    return l_out
+
+
 def iterate_minibatches(inputs, targets, batchsize, shuffle=False):
     assert len(inputs) == len(targets)
     if shuffle:
@@ -237,21 +275,27 @@ def iterate_minibatches(inputs, targets, batchsize, shuffle=False):
 
 
 def train_network(params):
-    X_train, y_train = create_data(params, params["N_train"])
-    X_val, y_val = create_data(params, params["N_val"])
-    X_test, y_test = create_data(params, params["N_test"])
-    y_train = transform_target(y_train, params["loss_choice"])
-    y_val = transform_target(y_val, params["loss_choice"])
-    y_test = transform_target(y_test, params["loss_choice"])
+    X_train, y_train_int = create_data(params, params["N_train"])
+    X_val, y_val_int = create_data(params, params["N_val"])
+    X_test, y_test_int = create_data(params, params["N_test"])
+    y_train = transform_target(y_train_int, params)
+    y_val = transform_target(y_val_int, params)
+    y_test = transform_target(y_test_int, params)
+
+    target_int_var = T.matrix('target_int')
 
     if params["loss_choice"] == "categorical_crossentropy":
-        # Prepare Theano variables for inputs and targets
-        input_var = T.matrix('inputs')
-        target_var = T.matrix('targets')
-
         print("Building model and compiling functions...")
         if params["model"] == 'mlp':
+            # Prepare Theano variables for inputs and targets
+            input_var = T.matrix('inputs')
+            target_var = T.matrix('targets')
             network = build_mlp(params, input_var)
+        elif params["model"] == "cnn":
+            # Prepare Theano variables for inputs and targets
+            input_var = T.tensor4('inputs')
+            target_var = T.matrix('targets')
+            network = build_cnn(params, input_var)
 
         output = lasagne.layers.get_output(network)
         if params["n_classes"] == 2:
@@ -265,7 +309,7 @@ def train_network(params):
         # Descent (SGD) with Nesterov momentum, but Lasagne offers plenty more.
         network_params = lasagne.layers.get_all_params(network, trainable=True)
         updates = lasagne.updates.nesterov_momentum(
-                loss, network_params, learning_rate=0.01, momentum=0.9)
+                loss, network_params, learning_rate=0.02, momentum=0.9)
 
         # Create a loss expression for validation/testing. The crucial difference
         # here is that we do a deterministic forward pass through the network,
@@ -273,7 +317,6 @@ def train_network(params):
         test_loss = lasagne.objectives.categorical_crossentropy(output,
                                                                 target_var)
         test_loss = test_loss.mean()
-
 
     if params["loss_choice"] == "MSE":
         # Prepare Theano variables for inputs and targets
@@ -303,16 +346,15 @@ def train_network(params):
         test_loss = test_loss.mean()
 
 
+    # As a bonus, also create an expression for the classification accuracy:
     if params["n_classes"] == 2:
         prediction = T.round(output)
     else:
         prediction = T.shape_padaxis(T.argmax(output, axis=1), 1)
-    # As a bonus, also create an expression for the classification accuracy:
-    test_acc = T.mean(T.eq(prediction, target_var),
-                    dtype=theano.config.floatX)
-
-#    mypred = theano.function([input_var], prediction)
-#    pdb.set_trace()
+    params["prediction_var"] = prediction
+    params["prediction_func"] = theano.function([input_var], prediction)
+    test_acc = T.mean(T.eq(prediction, target_int_var),
+                      dtype=theano.config.floatX)
 
 
     params["input_var"] = input_var
@@ -323,9 +365,11 @@ def train_network(params):
     train_fn = theano.function([input_var, target_var], loss, updates=updates)
 
     # Compile a second function computing the validation loss and accuracy:
-    val_fn = theano.function([input_var, target_var], [test_loss, test_acc])
+    val_fn = theano.function([input_var, target_int_var, target_var], [test_loss, test_acc])
 
-    # Finally, launch the training loop.
+
+    ############################################################################
+    # TRAINING LOOP
     print("Starting training...")
     # We iterate over epochs:
     for epoch in range(params["epochs"]):
@@ -335,38 +379,47 @@ def train_network(params):
         start_time = time.time()
         for batch in iterate_minibatches(X_train, y_train, params["minibatch_size"], shuffle=True):
             inputs, targets = batch
-            train_err += train_fn(inputs, targets)
+            if params["model"] == "cnn":
+                inputs = data_with_dims(inputs, params["input_shape"])
+                train_err += train_fn(inputs, targets)
             train_batches += 1
 
         # And a full pass over the validation data:
-        val_err = 0
-        val_acc = 0
-        val_batches = 0
-        for batch in iterate_minibatches(X_val, y_val, params["minibatch_size"], shuffle=False):
-            inputs, targets = batch
-            err, acc = val_fn(inputs, targets)
-            val_err += err
-            val_acc += acc
-            val_batches += 1
+        if epoch%5 == 0:
+            val_err = 0
+            val_acc = 0
+            val_batches = 0
+            for batch in iterate_minibatches(X_val, y_val_int, params["minibatch_size"], shuffle=False):
+                inputs, targets_int = batch
+                targets = one_hot_encoding(targets_int, params["n_classes"])
+                if params["model"] == "cnn":
+                    inputs = data_with_dims(inputs, params["input_shape"])
+                err, acc = val_fn(inputs, targets_int, targets)
+                val_err += err
+                val_acc += acc
+                val_batches += 1
 
-        if params["verbose"]:
-            # Then we print the results for this epoch:
-            print("Epoch {} of {} took {:.3f}s".format(
-                epoch + 1, params["epochs"], time.time() - start_time))
-            print("  training loss:\t\t{:.6f}".format(train_err / train_batches))
+            if params["verbose"]:
+                # Then we print the results for this epoch:
+                print("Epoch {} of {} took {:.3f}s".format(
+                    epoch + 1, params["epochs"], time.time() - start_time))
+                print("  training loss:\t\t{:.6f}".format(train_err / train_batches))
 
 
-            print("  validation loss:\t\t{:.6f}".format(val_err / val_batches))
-            print("  validation accuracy:\t\t{:.2f} %".format(
-                val_acc / val_batches * 100))
+                print("  validation loss:\t\t{:.6f}".format(val_err / val_batches))
+                print("  validation accuracy:\t\t{:.2f} %".format(
+                    val_acc / val_batches * 100))
 
     # After training, we compute and print the test error:
     test_err = 0
     test_acc = 0
     test_batches = 0
-    for batch in iterate_minibatches(X_test, y_test, params["minibatch_size"], shuffle=False):
-        inputs, targets = batch
-        err, acc = val_fn(inputs, targets)
+    for batch in iterate_minibatches(X_test, y_test_int, params["minibatch_size"], shuffle=False):
+        inputs, targets_int = batch
+        targets = one_hot_encoding(targets_int, params["n_classes"])
+        if params["model"] == "cnn":
+            inputs = data_with_dims(inputs, params["input_shape"])
+        err, acc = val_fn(inputs, targets_int, targets)
         test_err += err
         test_acc += acc
         test_batches += 1
@@ -490,7 +543,7 @@ def manual_classification(X):
     return manual_prediction
 
 
-def predict(X, network, n_output_units):
+def predict(X, network):
     """ Predicts the class of the input
 
     Input
@@ -498,8 +551,8 @@ def predict(X, network, n_output_units):
     """
     get_output = theano.function([params["input_var"]], lasagne.layers.get_output(network))
     output = get_output(X)
-    if n_output_units == 1:
-        return np.round(output)
+    if lasagne.layers.get_output_shape(network)[1] == 1:
+        return np.round(output, axis=1)
     else:
         return np.argmax(output, axis=1)
 
@@ -552,25 +605,20 @@ def compute_w(X, network, params):
 
 
 
+params["horseshoe_distractors"] = True
+A = get_horseshoe_pattern(params["horseshoe_distractors"])
+network, params = train_network(params)
 
 
+X, y = create_data(params, 5)
+X = data_with_dims(X, params["input_shape"])
+print(predict(X, network))
 
+prediction_func = params["prediction_func"]
 
+prediction_func(X)
+### IS def predict(..) NOW OBSOLETE?
 
-
-
-
-
-
-
-
-
-
-
-
-#params["horseshoe_distractors"] = True
-#A = get_horseshoe_pattern(params["horseshoe_distractors"])
-#network, params = train_network(params)
 #get_output = theano.function([params["input_var"]], lasagne.layers.get_output(network))
 
 # create another example
