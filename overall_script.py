@@ -247,7 +247,7 @@ def build_cnn(params, input_var):
                         filter_size=(3, 3),
                         pad="same",
                         nonlinearity=lasagne.nonlinearities.rectify)
-
+    n_filters = 4
     current_layer = lasagne.layers.Conv2DLayer(current_layer,
                         num_filters=n_filters,
                         filter_size=(3, 3),
@@ -275,6 +275,7 @@ def iterate_minibatches(inputs, targets, batchsize, shuffle=False):
 
 
 def train_network(params):
+    params = copy.deepcopy(params)
     X_train, y_train_int = create_data(params, params["N_train"])
     X_val, y_val_int = create_data(params, params["N_val"])
     X_test, y_test_int = create_data(params, params["N_test"])
@@ -288,12 +289,12 @@ def train_network(params):
         print("Building model and compiling functions...")
         if params["model"] == 'mlp':
             # Prepare Theano variables for inputs and targets
-            input_var = T.matrix('inputs')
+            input_var = T.matrix('mlp_inputs')
             target_var = T.matrix('targets')
             network = build_mlp(params, input_var)
         elif params["model"] == "cnn":
             # Prepare Theano variables for inputs and targets
-            input_var = T.tensor4('inputs')
+            input_var = T.tensor4('cnn_inputs')
             target_var = T.matrix('targets')
             network = build_cnn(params, input_var)
 
@@ -345,13 +346,16 @@ def train_network(params):
         test_loss = lasagne.objectives.squared_error(output, target_var)
         test_loss = test_loss.mean()
 
+    # save the get_output(X) to the params dict
+    params["get_output"] = theano.function([input_var], output)
+
 
     # As a bonus, also create an expression for the classification accuracy:
     if params["n_classes"] == 2:
         prediction = T.round(output)
     else:
         prediction = T.shape_padaxis(T.argmax(output, axis=1), 1)
-    params["prediction_var"] = prediction
+
     params["prediction_func"] = theano.function([input_var], prediction)
     test_acc = T.mean(T.eq(prediction, target_int_var),
                       dtype=theano.config.floatX)
@@ -381,7 +385,7 @@ def train_network(params):
             inputs, targets = batch
             if params["model"] == "cnn":
                 inputs = data_with_dims(inputs, params["input_shape"])
-                train_err += train_fn(inputs, targets)
+            train_err += train_fn(inputs, targets)
             train_batches += 1
 
         # And a full pass over the validation data:
@@ -457,7 +461,7 @@ def plot_heatmap(R_i, axis=None, title=""):
 def forward_pass(func_input, network, input_var):
     """
     IMPORTANT: THIS FUNCTION CAN ONLY BE CALLED WITH A SINGLE INPUT SAMPLE
-    the function expects a column vector
+    the function expects a row vector
     """
     get_activations = theano.function([input_var],
                 lasagne.layers.get_output(lasagne.layers.get_all_layers(network)))
@@ -467,9 +471,9 @@ def forward_pass(func_input, network, input_var):
     if func_input.ndim == 1:
         activations = get_activations(np.expand_dims(func_input, axis=0))
     elif func_input.ndim == 2:
-        if func_input.shape[1] > 1:
+        if func_input.shape[0] > 1:
             raise("ERROR: only pass a single datapoint to forward_pass()!")
-        activations = get_activations(func_input.T)
+        activations = get_activations(func_input)
     elif activations.ndim > 2:
         raise("Input data had too many dimensions")
 
@@ -523,6 +527,10 @@ def compute_relevance(func_input, network, output_neuron, params, epsilon = .01)
 
 
 def manual_classification(X):
+    """ Performs a manual classification of the horseshoe data
+        using knowledge of the data creation process
+        Input: X of shape (samples, width, height)
+    """
     def single_classification(func_input):
         left_bar = np.sum(func_input[3:7, 2])
         right_bar = np.sum(func_input[3:7, 7])
@@ -540,21 +548,9 @@ def manual_classification(X):
         # do manual classification by summing over bars
         manual_prediction[idx] = single_classification(X[idx])
 
+    # bring into column vector shape and cast to int
+    manual_prediction = manual_prediction[:, na].astype(int)
     return manual_prediction
-
-
-def predict(X, network):
-    """ Predicts the class of the input
-
-    Input
-    X: [samples, features]
-    """
-    get_output = theano.function([params["input_var"]], lasagne.layers.get_output(network))
-    output = get_output(X)
-    if lasagne.layers.get_output_shape(network)[1] == 1:
-        return np.round(output, axis=1)
-    else:
-        return np.argmax(output, axis=1)
 
 
 def compute_w(X, network, params):
@@ -593,59 +589,108 @@ def compute_w(X, network, params):
     for idx in range(1, len(S_mats)):
         s = np.dot(S_mats[idx], s)
 
-    X_ext = np.vstack((X, 1)) # the double transpose is due to weird behavior of vstack
-    if not np.allclose(np.dot(s, X_ext), preactivations[-1]):
+    X_ext = np.vstack((X.T, 1)).T # the double transpose is due to weird behavior of vstack
+    if not np.allclose(np.dot(s, X_ext.T), preactivations[-1]):
         # checking whether the computed w gives the same result as the network
         # gave
         raise("There was an error computing the weight vector")
 
     w = s[:, :-1]
-
-    return w.T
-
-
-
-params["horseshoe_distractors"] = True
-A = get_horseshoe_pattern(params["horseshoe_distractors"])
-network, params = train_network(params)
+    print(w.shape)
+    return w
 
 
-X, y = create_data(params, 5)
-X = data_with_dims(X, params["input_shape"])
-print(predict(X, network))
+def compute_accuracy(y, y_hat):
+    """ Compute the percentage of correct classifications """
+    if y.shape == y_hat.shape:
+        n_correct = np.sum(y == y_hat)
+        p_correct = n_correct / y.size
+        return p_correct
+    else:
+        raise("The two inputs didn't have the same shape")
 
-prediction_func = params["prediction_func"]
 
-prediction_func(X)
-### IS def predict(..) NOW OBSOLETE?
+# regular mlp
+params["model"] = "mlp"
+params["layer_sizes"] = [100, 100, 10] # as requested by pieter-jan
+mlp, mlp_params = train_network(params)
+mlp_prediction_func = mlp_params["prediction_func"]
+
+params["model"] = "cnn"
+cnn, cnn_params = train_network(params)
+cnn_prediction_func = cnn_params["prediction_func"]
+
+
+# compare prediction scores
+# some more data
+X, y = create_data(params, 500)
+
+# predict with mlp
+mlp_prediction = mlp_prediction_func(X)
+mlp_score = compute_accuracy(y, mlp_prediction)
+
+
+# predict with cnn
+X = data_with_dims(X, cnn_params["input_shape"])
+cnn_prediction = cnn_prediction_func(X)
+cnn_score = compute_accuracy(y, cnn_prediction)
+
+# manually predict
+man_prediction = manual_classification(X[:, 0, :, :])
+man_score = compute_accuracy(y, man_prediction)
+
+
+print("MLP score: " + str(mlp_score))
+print("CNN score: " + str(cnn_score))
+print("manual score: " + str(man_score))
+
+X, y = create_data(params, 1)
+w_mlp = compute_w(X, mlp, mlp_params)
+plot_heatmap(w_mlp[0].reshape((10, 10)))
+plt.show()
+mlp_params["input_var"]
+
+#cnn_wmats, cnn_biases = get_network_parameters(cnn, params["bias_in_data"])
+#cnn_wmats[1].shape
+#all_layers = lasagne.layers.get_all_layers(cnn)
+#lasagne.layers.get_output_shape(all_layers[-2])
+#fig, axes = plt.subplots(1, 5, figsize=(15, 10))
+#for filter_idx in np.arange(5):
+#    plot_heatmap(cnn_wmats[0][:,:,0,filter_idx], axes[filter_idx])
+#    plt.subplots_adjust(wspace=.5)
+#    plt.savefig(open("relevance.png", "w"))
+#plt.show()
+
+
+
 
 #get_output = theano.function([params["input_var"]], lasagne.layers.get_output(network))
 
 # create another example
-#X, y = create_data(params, 4)
+#x, y = create_data(params, 4)
 #
 #fig, axes = plt.subplots(1, 5, figsize=(15, 10))
 ## first plotting the input image
-#title = "Input image"
-#X_withdims = np.reshape(X[params["dataset"]], (10, 10))
-#plot_heatmap(X_withdims, y[params["dataset"]], axis=axes[0], title=title)
+#title = "input image"
+#x_withdims = np.reshape(x[params["dataset"]], (10, 10))
+#plot_heatmap(x_withdims, y[params["dataset"]], axis=axes[0], title=title)
 #for output_neuron in np.arange(4):
 #    title = get_target_title(output_neuron)
-#    X[params["dataset"]].shape
-#    R = compute_relevance(X[params["dataset"]], network, output_neuron, params)
-#    plot_heatmap(R, output_neuron, axes[output_neuron+1], title)
+#    x[params["dataset"]].shape
+#    r = compute_relevance(x[params["dataset"]], network, output_neuron, params)
+#    plot_heatmap(r, output_neuron, axes[output_neuron+1], title)
 #    plt.subplots_adjust(wspace=.5)
 #    plt.savefig(open("relevance.png", "w"))
 
 
 ######## logistic regression
-#print("Performing Logistic Regression")
-#X_train, y_train = create_data(params, params["N_train"])
-#LogReg = LogisticRegression()
-#LogReg.fit(X_train, np.ravel(y_train))
-#coefs = LogReg.coef_
+#print("performing logistic regression")
+#x_train, y_train = create_data(params, params["n_train"])
+#logreg = logisticregression()
+#logreg.fit(x_train, np.ravel(y_train))
+#coefs = logreg.coef_
 #coefs = np.reshape(coefs, (coefs.shape[0], 10,-1))
-#print("Finished Logistic Regression")
+#print("finished logistic regression")
 #
 ## plot a random input sample
 #plot_heatmap(X_train[0].reshape((10, 10)), title="training image")
