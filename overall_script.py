@@ -35,9 +35,9 @@ def one_hot_encoding(target, n_classes):
     """
     if n_classes == 1:
         return target
-    target_vec = np.zeros((len(target), n_classes))
-    target_vec[range(len(target)), target.flatten()] = 1
-    return target_vec
+    target = target.flatten()
+    target_mat = np.eye(n_classes)[target]
+    return target_mat
 
 
 def one_minus_one_encoding(target, n_classes):
@@ -141,25 +141,30 @@ def create_data(params, N):
 
 def create_horseshoe_data(params, N):
     A = get_horseshoe_pattern(params["horseshoe_distractors"])
-    if params["horseshoe_distractors"]:
-        y = np.zeros((8, N))
-        y[np.random.randint(4, size=N), range(N)] = 1
-        y[np.random.randint(low=4, high=8, size=N), range(N)] = 1
+
+    if params["specific_dataclass"] is not None:
+        # this will/should only be triggered if N=1, in this case the user
+        # requests a datapoint of a specific class
+        y_true = np.array([params["specific_dataclass"]])[:, na]
     else:
-        y = np.zeros((4, N))
-        y[np.random.randint(4, size=N), range(N)] = 1
+        # if no specific class is requested, generate classes randomly
+        y_true = np.random.randint(low=0, high=4, size=N)[:, na]
+
+    y_onehot = one_hot_encoding(y_true, params["n_classes"]).T
+
+    if params["horseshoe_distractors"]:
+        y_dist = np.random.randint(low=0, high=4, size=N)[:, na]
+        y_dist_onehot = one_hot_encoding(y_dist, params["n_classes"])
+        y_onehot = np.concatenate((y_onehot, y_dist_onehot.T), axis=0)
 
     # create X by multiplying the target vector with the patterns,
     # and tranpose because we want the data to be in [samples, features] form
-    X = np.dot(A, y).T
+    X = np.dot(A, y_onehot).T
 
     for idx in range(X.shape[0]):
         X[idx, :] += (np.random.normal(size=(100))*params["noise_scale"])
 
-
-    y = np.argmax(y, axis=0)[:, na]
-    y = y.astype(np.int32)
-
+    y = y_true.astype(np.int32)
     return X, y
 
 
@@ -346,7 +351,10 @@ def train_network(params):
         test_loss = lasagne.objectives.squared_error(output, target_var)
         test_loss = test_loss.mean()
 
-    # save the get_output(X) to the params dict
+    # save some useful variables and functions into the params dict
+    params["input_var"] = input_var
+    params["target_var"] = target_var
+    params["output_var"] = output
     params["get_output"] = theano.function([input_var], output)
 
 
@@ -360,9 +368,6 @@ def train_network(params):
     test_acc = T.mean(T.eq(prediction, target_int_var),
                       dtype=theano.config.floatX)
 
-
-    params["input_var"] = input_var
-    params["target_var"] = target_var
 
     # Compile a function performing a training step on a mini-batch (by giving
     # the updates dictionary) and returning the corresponding training loss:
@@ -389,7 +394,7 @@ def train_network(params):
             train_batches += 1
 
         # And a full pass over the validation data:
-        if epoch%5 == 0:
+        if epoch%10 == 0:
             val_err = 0
             val_acc = 0
             val_batches = 0
@@ -616,40 +621,60 @@ params["layer_sizes"] = [100, 100, 10] # as requested by pieter-jan
 mlp, mlp_params = train_network(params)
 mlp_prediction_func = mlp_params["prediction_func"]
 
-params["model"] = "cnn"
-cnn, cnn_params = train_network(params)
-cnn_prediction_func = cnn_params["prediction_func"]
+#params["model"] = "cnn"
+#cnn, cnn_params = train_network(params)
+#cnn_prediction_func = cnn_params["prediction_func"]
 
 
-# compare prediction scores
-# some more data
-X, y = create_data(params, 500)
+## compare prediction scores
+## some more data
+#X, y = create_data(params, 500)
+#
+## predict with mlp
+#mlp_prediction = mlp_prediction_func(X)
+#mlp_score = compute_accuracy(y, mlp_prediction)
+#
+#
+## predict with cnn
+#X = data_with_dims(X, cnn_params["input_shape"])
+#cnn_prediction = cnn_prediction_func(X)
+#cnn_score = compute_accuracy(y, cnn_prediction)
+#
+## manually predict
+#man_prediction = manual_classification(X[:, 0, :, :])
+#man_score = compute_accuracy(y, man_prediction)
+#
+#
+#print("MLP score: " + str(mlp_score))
+#print("CNN score: " + str(cnn_score))
+#print("manual score: " + str(man_score))
 
-# predict with mlp
-mlp_prediction = mlp_prediction_func(X)
-mlp_score = compute_accuracy(y, mlp_prediction)
-
-
-# predict with cnn
-X = data_with_dims(X, cnn_params["input_shape"])
-cnn_prediction = cnn_prediction_func(X)
-cnn_score = compute_accuracy(y, cnn_prediction)
-
-# manually predict
-man_prediction = manual_classification(X[:, 0, :, :])
-man_score = compute_accuracy(y, man_prediction)
-
-
-print("MLP score: " + str(mlp_score))
-print("CNN score: " + str(cnn_score))
-print("manual score: " + str(man_score))
-
+params["specific_dataclass"] = 0
 X, y = create_data(params, 1)
 w_mlp = compute_w(X, mlp, mlp_params)
 plot_heatmap(w_mlp[0].reshape((10, 10)))
 plt.show()
 mlp_params["input_var"]
+X.shape
 
+# get A via Haufe method
+params["specific_dataclass"] = None
+X_train, y_train = create_data(params, 500)
+y_train
+A = get_horseshoe_pattern(params["horseshoe_distractors"])
+y = one_hot_encoding(y_train, params["n_classes"])
+params["n_classes"]
+np.eye(params["n_classes"])[y_train.flatten()]
+Sigma_s = np.cov(y.T)
+Sigma_X = np.cov(X_train.T)
+A_haufe = np.dot(np.dot(Sigma_X, w_mlp.T), Sigma_s)
+
+fig, axes = plt.subplots(1, 4)
+plot_heatmap(A[:, 0].reshape((10, 10)), axis=axes[0], title="True A")
+plot_heatmap(X.reshape((10, 10)), axis=axes[1], title="input point")
+plot_heatmap(w_mlp.T[:, 0].reshape((10, 10)), axis=axes[2], title="W")
+plot_heatmap(A_haufe[:, 0].reshape((10, 10)), axis=axes[3], title="A Haufe 2013")
+plt.show()
 #cnn_wmats, cnn_biases = get_network_parameters(cnn, params["bias_in_data"])
 #cnn_wmats[1].shape
 #all_layers = lasagne.layers.get_all_layers(cnn)
@@ -662,9 +687,25 @@ mlp_params["input_var"]
 #plt.show()
 
 
+mlp_params["output_var"]
+gradient = T.grad(mlp_params["output_var"][0, 0], mlp_params["input_var"])
+compute_grad = theano.function([mlp_params["input_var"]], gradient)
+w_mlp_z = compute_grad(X)
+#w_mlp[0, :] /= np.linalg.norm(w_mlp[0, :])
+#w_mlp_z[0, :] /= np.linalg.norm(w_mlp_z[0, :])
 
+plot_heatmap(w_mlp_z.reshape((10, 10)))
+plot_heatmap(w_mlp[0, :].reshape((10, 10)))
+w_mlp_z - w_mlp[0, :]
+plt.show()
+
+w_mlp_z[0, :10]
+w_mlp[0, :10]
+
+a = mlp_params["output_var"][0]
 
 #get_output = theano.function([params["input_var"]], lasagne.layers.get_output(network))
+#theano.printing.debugprint(mlp_params["output_var"])
 
 # create another example
 #x, y = create_data(params, 4)

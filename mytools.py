@@ -14,7 +14,7 @@ def get_CLI_parameters(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument("-l", "--loss_choice", default="categorical_crossentropy")
     parser.add_argument("--noise_scale", default=0.4, type=float)
-    parser.add_argument("-e", "--epochs", default=10, type=int)
+    parser.add_argument("-e", "--epochs", default=100, type=int)
     parser.add_argument("-m", "--model", default="cnn")
     parser.add_argument("--layer_sizes", default="20, 20")
     parser.add_argument("-p", "--do_plotting", default=True)
@@ -35,6 +35,7 @@ def get_CLI_parameters(argv):
     params["input_shape"] = [10, 10]
     params["output_neuron"] = 1
     params["horseshoe_distractors"] = True
+    params["specific_dataclass"] = None
 
     # extract layer sizes from input string
     layer_list = []
