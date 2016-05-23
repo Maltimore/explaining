@@ -619,14 +619,15 @@ def compute_accuracy(y, y_hat):
 params["model"] = "mlp"
 params["layer_sizes"] = [100, 100, 10] # as requested by pieter-jan
 mlp, mlp_params = train_network(params)
+mlp_params["input_shape"] = [100]
 mlp_prediction_func = mlp_params["prediction_func"]
 
-#params["model"] = "cnn"
-#cnn, cnn_params = train_network(params)
-#cnn_prediction_func = cnn_params["prediction_func"]
+params["model"] = "cnn"
+cnn, cnn_params = train_network(params)
+cnn_prediction_func = cnn_params["prediction_func"]
 
 
-## compare prediction scores
+## ### compare prediction scores ###
 ## some more data
 #X, y = create_data(params, 500)
 #
@@ -649,66 +650,95 @@ mlp_prediction_func = mlp_params["prediction_func"]
 #print("CNN score: " + str(cnn_score))
 #print("manual score: " + str(man_score))
 
+
+
+
+## computing the gradient of the inputs of the MLP
+#mlp_gradient = T.grad(mlp_params["output_var"][0, 0], mlp_params["input_var"])
+#compute_grad_mlp = theano.function([mlp_params["input_var"]], mlp_gradient)
+#mlp_gradient = compute_grad_mlp(X)
+## normalize the gradient
+#mlp_gradient /= np.linalg.norm(mlp_gradient)
+#
+## computing the gradient of the inputs of the CNN
+#cnn_gradient = T.grad(cnn_params["output_var"][0, 0], cnn_params["input_var"])
+#compute_grad_cnn = theano.function([cnn_params["input_var"]], cnn_gradient)
+#cnn_gradient = compute_grad_cnn(data_with_dims(X, cnn_params["input_shape"]))
+#cnn_gradient = cnn_gradient.reshape((1, 100))
+## normalize the gradient
+#cnn_gradient /= np.linalg.norm(cnn_gradient)
+
+
+
+def get_W_from_gradients(X, params):
+    input_shape = params["input_shape"]
+    # the shape of output_var is [1, n_output_units]
+    if len(params["input_shape"]) == 1:
+        total_input_shape = input_shape[0]
+    elif len(input_shape) == 2:
+        total_input_shape = input_shape[0] * input_shape[1]
+        X = data_with_dims(X, params["input_shape"])
+    else:
+        raise("Unexpected input shape")
+    W = np.empty((total_input_shape, params["n_output_units"]))
+    for output_idx in range(params["n_output_units"]):
+        gradient = T.grad(params["output_var"][0, 0], params["input_var"])
+        compute_grad = theano.function([params["input_var"]], gradient)
+        gradient = compute_grad(X)
+        W[:, output_idx] = gradient.flatten()
+    return W
+
+
+# get an input point for which we want the weights / patterns
 params["specific_dataclass"] = 0
+params["input_shape"] = [100]
 X, y = create_data(params, 1)
-w_mlp = compute_w(X, mlp, mlp_params)
-plot_heatmap(w_mlp[0].reshape((10, 10)))
-plt.show()
-mlp_params["input_var"]
 X.shape
+
+len(mlp_params["input_shape"])
 
 # get A via Haufe method
 params["specific_dataclass"] = None
 X_train, y_train = create_data(params, 500)
-y_train
 A = get_horseshoe_pattern(params["horseshoe_distractors"])
 y = one_hot_encoding(y_train, params["n_classes"])
-params["n_classes"]
-np.eye(params["n_classes"])[y_train.flatten()]
 Sigma_s = np.cov(y.T)
 Sigma_X = np.cov(X_train.T)
-A_haufe = np.dot(np.dot(Sigma_X, w_mlp.T), Sigma_s)
+W_mlp = get_W_from_gradients(X, mlp_params)
+A_haufe_mlp = np.dot(np.dot(Sigma_X, W_mlp), Sigma_s)
+W_cnn = get_W_from_gradients(data_with_dims(X, cnn_params["input_shape"]), cnn_params)
+A_haufe_cnn = np.dot(np.dot(Sigma_X, W_cnn), Sigma_s)
 
+#debug
+mlp_gradient.shape
+cnn_gradient.shape
+Sigma_X.shape
+Sigma_s.shape
+
+
+# plot real pattern, input point, weights and haufe pattern for MLP
+grad_mlp = W_mlp[:, 0]
 fig, axes = plt.subplots(1, 4)
 plot_heatmap(A[:, 0].reshape((10, 10)), axis=axes[0], title="True A")
 plot_heatmap(X.reshape((10, 10)), axis=axes[1], title="input point")
-plot_heatmap(w_mlp.T[:, 0].reshape((10, 10)), axis=axes[2], title="W")
-plot_heatmap(A_haufe[:, 0].reshape((10, 10)), axis=axes[3], title="A Haufe 2013")
-plt.show()
-#cnn_wmats, cnn_biases = get_network_parameters(cnn, params["bias_in_data"])
-#cnn_wmats[1].shape
-#all_layers = lasagne.layers.get_all_layers(cnn)
-#lasagne.layers.get_output_shape(all_layers[-2])
-#fig, axes = plt.subplots(1, 5, figsize=(15, 10))
-#for filter_idx in np.arange(5):
-#    plot_heatmap(cnn_wmats[0][:,:,0,filter_idx], axes[filter_idx])
-#    plt.subplots_adjust(wspace=.5)
-#    plt.savefig(open("relevance.png", "w"))
-#plt.show()
-
-
-mlp_params["output_var"]
-gradient = T.grad(mlp_params["output_var"][0, 0], mlp_params["input_var"])
-compute_grad = theano.function([mlp_params["input_var"]], gradient)
-mlp_gradient = compute_grad(X)
-
-# normalize the gradient and w_flat
-w_mlp[0, :] /= np.linalg.norm(w_mlp[0, :])
-mlp_gradient /= np.linalg.norm(mlp_gradient)
-
-# plot both the gradient and w_flat
-plot_heatmap(mlp_gradient.reshape((10, 10)))
-plot_heatmap(w_mlp[0, :].reshape((10, 10)))
+plot_heatmap(grad_mlp.reshape((10, 10)), axis=axes[2], title="W")
+plot_heatmap(A_haufe_mlp[:, 0].reshape((10, 10)), axis=axes[3], title="A Haufe 2013")
+plt.suptitle("MLP", size=16)
 plt.show()
 
-# verify that the two are equal numerically
-if np.allclose(mlp_gradient, w_mlp[0, :]):
-    print("The gradient and w_flat are equal!")
+# plot real pattern, input point, weights and haufe pattern for CNN
+grad_cnn = W_cnn[:, 0]
+fig, axes = plt.subplots(1, 4)
+plot_heatmap(A[:, 0].reshape((10, 10)), axis=axes[0], title="True A")
+plot_heatmap(X.reshape((10, 10)), axis=axes[1], title="input point")
+plot_heatmap(grad_cnn.reshape((10, 10)), axis=axes[2], title="W")
+plot_heatmap(A_haufe_cnn[:, 0].reshape((10, 10)), axis=axes[3], title="A Haufe 2013")
+plt.suptitle("MLP", size=16)
+plt.show()
 
-w_mlp_z[0, :10]
-w_mlp[0, :10]
 
-a = mlp_params["output_var"][0]
+
+
 
 #get_output = theano.function([params["input_var"]], lasagne.layers.get_output(network))
 #theano.printing.debugprint(mlp_params["output_var"])
