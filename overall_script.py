@@ -690,14 +690,20 @@ plt.show()
 mlp_params["output_var"]
 gradient = T.grad(mlp_params["output_var"][0, 0], mlp_params["input_var"])
 compute_grad = theano.function([mlp_params["input_var"]], gradient)
-w_mlp_z = compute_grad(X)
-#w_mlp[0, :] /= np.linalg.norm(w_mlp[0, :])
-#w_mlp_z[0, :] /= np.linalg.norm(w_mlp_z[0, :])
+mlp_gradient = compute_grad(X)
 
-plot_heatmap(w_mlp_z.reshape((10, 10)))
+# normalize the gradient and w_flat
+w_mlp[0, :] /= np.linalg.norm(w_mlp[0, :])
+mlp_gradient /= np.linalg.norm(mlp_gradient)
+
+# plot both the gradient and w_flat
+plot_heatmap(mlp_gradient.reshape((10, 10)))
 plot_heatmap(w_mlp[0, :].reshape((10, 10)))
-w_mlp_z - w_mlp[0, :]
 plt.show()
+
+# verify that the two are equal numerically
+if np.allclose(mlp_gradient, w_mlp[0, :]):
+    print("The gradient and w_flat are equal!")
 
 w_mlp_z[0, :10]
 w_mlp[0, :10]
