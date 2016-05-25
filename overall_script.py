@@ -145,21 +145,24 @@ def create_horseshoe_data(params, N):
     if params["specific_dataclass"] is not None:
         # this will/should only be triggered if N=1, in this case the user
         # requests a datapoint of a specific class
+        if N != 1:
+            raise("specific_dataclass is set so N should be 1")
         y_true = np.array([params["specific_dataclass"]])[:, na]
     else:
         # if no specific class is requested, generate classes randomly
         y_true = np.random.randint(low=0, high=4, size=N)[:, na]
 
-    y_onehot = one_hot_encoding(y_true, params["n_classes"]).T
+    y = one_hot_encoding(y_true, params["n_output_units"]).T
 
     if params["horseshoe_distractors"]:
-        y_dist = np.random.randint(low=0, high=4, size=N)[:, na]
-        y_dist_onehot = one_hot_encoding(y_dist, params["n_classes"])
-        y_onehot = np.concatenate((y_onehot, y_dist_onehot.T), axis=0)
+#        y_dist = np.random.randint(low=0, high=4, size=N)[:, na]
+#        y_dist_onehot = one_hot_encoding(y_dist, params["n_output_units"])
+        y_dist = np.random.normal(size=(4, N))
+        y = np.concatenate((y, y_dist), axis=0)
 
     # create X by multiplying the target vector with the patterns,
     # and tranpose because we want the data to be in [samples, features] form
-    X = np.dot(A, y_onehot).T
+    X = np.dot(A, y).T
 
     for idx in range(X.shape[0]):
         X[idx, :] += (np.random.normal(size=(100))*params["noise_scale"])
@@ -246,7 +249,7 @@ def build_cnn(params, input_var):
                                                     params["input_shape"][1]),
                                             input_var=input_var)
     # Hidden layers
-    n_filters = 5
+    n_filters = 15
     current_layer = lasagne.layers.Conv2DLayer(current_layer,
                         num_filters=n_filters,
                         filter_size=(3, 3),
@@ -709,13 +712,6 @@ A_haufe_mlp = np.dot(np.dot(Sigma_X, W_mlp), Sigma_s)
 W_cnn = get_W_from_gradients(data_with_dims(X, cnn_params["input_shape"]), cnn_params)
 A_haufe_cnn = np.dot(np.dot(Sigma_X, W_cnn), Sigma_s)
 
-#debug
-mlp_gradient.shape
-cnn_gradient.shape
-Sigma_X.shape
-Sigma_s.shape
-
-
 # plot real pattern, input point, weights and haufe pattern for MLP
 grad_mlp = W_mlp[:, 0]
 fig, axes = plt.subplots(1, 4)
@@ -733,7 +729,7 @@ plot_heatmap(A[:, 0].reshape((10, 10)), axis=axes[0], title="True A")
 plot_heatmap(X.reshape((10, 10)), axis=axes[1], title="input point")
 plot_heatmap(grad_cnn.reshape((10, 10)), axis=axes[2], title="W")
 plot_heatmap(A_haufe_cnn[:, 0].reshape((10, 10)), axis=axes[3], title="A Haufe 2013")
-plt.suptitle("MLP", size=16)
+plt.suptitle("CNN", size=16)
 plt.show()
 
 
