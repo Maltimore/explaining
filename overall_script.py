@@ -30,10 +30,7 @@ import pdb
 na = np.newaxis
 
 def one_hot_encoding(target, n_classes):
-    """ IMPORTANT: if there are only two classes, this doesn't return a
-        one hot encoding but instead just leaves the target vector as is
-    """
-    if n_classes == 1:
+    if target.shape[1] > 1:
         return target
     target = target.flatten()
     target_mat = np.eye(n_classes)[target]
@@ -41,6 +38,7 @@ def one_hot_encoding(target, n_classes):
 
 
 def one_minus_one_encoding(target, n_classes):
+    target = target.squeeze()
     target_vec = np.ones((len(target), n_classes)) * (-1)
     target_vec[range(len(target)), target] = 1
     return target_vec
@@ -50,10 +48,15 @@ def transform_target(target, params):
     """ Transforms the target from an int value to other target choices
         like one-hot
     """
+    if "n_output_units" in params:
+        n_output_units = params["n_output_units"]
+    else:
+        n_output_units = params["n_classes"]
+
     if params["loss_choice"] == "categorical_crossentropy":
-        return one_hot_encoding(target, params["n_classes"])
+        return one_hot_encoding(target, n_output_units)
     elif params["loss_choice"] == "MSE":
-        return one_minus_one_encoding(target, params["n_classes"])
+        return one_minus_one_encoding(target, n_output_units)
 
 
 def data_with_dims(X, input_shape):
@@ -175,9 +178,9 @@ def create_ring_data(params, N):
     """
     Creates 2d data aligned in clusters aligned on a ring
     """
-    n_centers = 10
+    n_centers = 8
     n_per_center = int(np.ceil(N / n_centers))
-    C = .01*np.eye(params["input_dim"])
+    C = .02*np.eye(params["input_dim"])
     radius = 1
     class_means = radius*np.array([[np.cos(i*2.*np.pi/n_centers),np.sin(i*2.*np.pi/n_centers)] for i in range(n_centers)])
 
@@ -220,23 +223,8 @@ def build_mlp(params, input_var=None):
             W=lasagne.init.GlorotUniform(),
             b=bias)
 
-
-    # Output layer
-    if params["loss_choice"] == "categorical_crossentropy":
-        if params["n_classes"] == 2:
-            print("Binary classification problem detected, using one output neuron")
-            l_out = lasagne.layers.DenseLayer(
-                    current_layer, num_units=1,
-                    nonlinearity=lasagne.nonlinearities.sigmoid,
-                    b=bias)
-        else:
-            l_out = lasagne.layers.DenseLayer(
-                    current_layer, num_units=params["n_classes"],
-                    nonlinearity=lasagne.nonlinearities.softmax,
-                    b=bias)
-    elif params["loss_choice"] == "MSE":
         l_out = lasagne.layers.DenseLayer(
-                current_layer, num_units=params["n_classes"],
+                current_layer, num_units=params["n_output_units"],
                 nonlinearity=lasagne.nonlinearities.linear)
     return l_out
 
@@ -284,12 +272,13 @@ def iterate_minibatches(inputs, targets, batchsize, shuffle=False):
 
 def train_network(params):
     params = copy.deepcopy(params)
-    X_train, y_train_int = create_data(params, params["N_train"])
-    X_val, y_val_int = create_data(params, params["N_val"])
-    X_test, y_test_int = create_data(params, params["N_test"])
-    y_train = transform_target(y_train_int, params)
-    y_val = transform_target(y_val_int, params)
-    y_test = transform_target(y_test_int, params)
+    X_train, y_train= create_data(params, params["N_train"])
+    X_val, y_val= create_data(params, params["N_val"])
+    X_test, y_test= create_data(params, params["N_test"])
+    if params["n_output_units"] > 1:
+        y_train = transform_target(y_train, params)
+        y_val = transform_target(y_val, params)
+        y_test = transform_target(y_test, params)
 
     target_int_var = T.matrix('target_int')
 
@@ -362,22 +351,28 @@ def train_network(params):
 
 
     # As a bonus, also create an expression for the classification accuracy:
-    if params["n_classes"] == 2:
-        prediction = T.round(output)
+    if params["n_output_units"] == 2:
+        prediction_var = T.round(output)
     else:
-        prediction = T.shape_padaxis(T.argmax(output, axis=1), 1)
+        prediction_var = T.shape_padaxis(T.argmax(output, axis=1), 1)
 
-    params["prediction_func"] = theano.function([input_var], prediction)
-    test_acc = T.mean(T.eq(prediction, target_int_var),
-                      dtype=theano.config.floatX)
+    params["prediction_func"] = theano.function([input_var], prediction_var, allow_input_downcast=True)
 
 
     # Compile a function performing a training step on a mini-batch (by giving
     # the updates dictionary) and returning the corresponding training loss:
-    train_fn = theano.function([input_var, target_var], loss, updates=updates)
+    train_fn = theano.function([input_var, target_var], loss, updates=updates, allow_input_downcast=True)
 
     # Compile a second function computing the validation loss and accuracy:
-    val_fn = theano.function([input_var, target_int_var, target_var], [test_loss, test_acc])
+    def val_fn(X, y):
+        y_hat = params["prediction_func"](X)
+
+        # transform from one-hot into scalar int if necessary
+        if y_hat.shape[1] > 1:
+            y_hat = np.argmax(y_hat, axis=1)
+            y = np.argmax(y, axis=1)
+
+        return np.sum(y_hat == y) / y.shape[0]
 
 
     ############################################################################
@@ -398,16 +393,13 @@ def train_network(params):
 
         # And a full pass over the validation data:
         if epoch%10 == 0:
-            val_err = 0
             val_acc = 0
             val_batches = 0
-            for batch in iterate_minibatches(X_val, y_val_int, params["minibatch_size"], shuffle=False):
-                inputs, targets_int = batch
-                targets = one_hot_encoding(targets_int, params["n_classes"])
+            for batch in iterate_minibatches(X_val, y_val, params["minibatch_size"], shuffle=False):
+                inputs, targets = batch
                 if params["model"] == "cnn":
                     inputs = data_with_dims(inputs, params["input_shape"])
-                err, acc = val_fn(inputs, targets_int, targets)
-                val_err += err
+                acc = val_fn(inputs, targets)
                 val_acc += acc
                 val_batches += 1
 
@@ -418,25 +410,21 @@ def train_network(params):
                 print("  training loss:\t\t{:.6f}".format(train_err / train_batches))
 
 
-                print("  validation loss:\t\t{:.6f}".format(val_err / val_batches))
                 print("  validation accuracy:\t\t{:.2f} %".format(
                     val_acc / val_batches * 100))
 
     # After training, we compute and print the test error:
-    test_err = 0
     test_acc = 0
     test_batches = 0
-    for batch in iterate_minibatches(X_test, y_test_int, params["minibatch_size"], shuffle=False):
-        inputs, targets_int = batch
-        targets = one_hot_encoding(targets_int, params["n_classes"])
+    for batch in iterate_minibatches(X_test, y_test, params["minibatch_size"], shuffle=False):
+        inputs, targets = batch
+        targets = one_hot_encoding(targets, params["n_classes"])
         if params["model"] == "cnn":
             inputs = data_with_dims(inputs, params["input_shape"])
-        err, acc = val_fn(inputs, targets_int, targets)
-        test_err += err
+        acc = val_fn(inputs, targets)
         test_acc += acc
         test_batches += 1
     print("Final results:")
-    print("  test loss:\t\t\t{:.6f}".format(test_err / test_batches))
     print("  test accuracy:\t\t{:.2f} %".format(
         test_acc / test_batches * 100))
     return network, params
@@ -466,13 +454,14 @@ def plot_heatmap(R_i, axis=None, title=""):
     plt.colorbar(plot, ax=axis)
 
 
-def forward_pass(func_input, network, input_var):
+def forward_pass(func_input, network, input_var, params):
     """
     IMPORTANT: THIS FUNCTION CAN ONLY BE CALLED WITH A SINGLE INPUT SAMPLE
     the function expects a row vector
     """
     get_activations = theano.function([input_var],
-                lasagne.layers.get_output(lasagne.layers.get_all_layers(network)))
+                lasagne.layers.get_output(lasagne.layers.get_all_layers(network)), 
+                allow_input_downcast=True)
     # in the following, the dimension has to be expanded because we're
     # performing a forward pass of just one input sample here but the network
     # expects several
@@ -489,6 +478,7 @@ def forward_pass(func_input, network, input_var):
     for idx in range(len(activations)):
         activations[idx] = activations[idx].T
     return activations
+
 
 
 def get_network_parameters(network, bias_in_data):
@@ -513,7 +503,7 @@ def get_network_parameters(network, bias_in_data):
 
 def compute_relevance(func_input, network, output_neuron, params, epsilon = .01):
     W_mats, biases = get_network_parameters(network, params["bias_in_data"])
-    activations = forward_pass(func_input, network, params["input_var"])
+    activations = forward_pass(func_input, network, params["input_var"], params)
 
     # --- forward propagation to compute preactivations ---
     preactivations = []
@@ -562,9 +552,9 @@ def manual_classification(X):
 
 
 def compute_w(X, network, params):
-    activations = forward_pass(X, network, params["input_var"])
+    activations = forward_pass(X, network, params["input_var"], params)
     W_mats, biases = get_network_parameters(network, params["bias_in_data"])
-    S_mats = copy.deepcopy(W_mats) # this makes an actual copy of W_mats
+    S_mats = copy.deepcopy(W_mats)
 
     # --- forward propagation to compute preactivations ---
     # this is not strictly necessary to compute, I only use it to verify that
@@ -583,6 +573,7 @@ def compute_w(X, network, params):
         S_mats[idx] = np.hstack((S_mats[idx], bias_and_one))
 
         # extend all activations by a 1
+#        import pdb; pdb.set_trace()
         activations[idx+1] = np.vstack((activations[idx+1], 1))
 
         # set the rows in the weight matrix to zero where the activation of the
@@ -598,13 +589,12 @@ def compute_w(X, network, params):
         s = np.dot(S_mats[idx], s)
 
     X_ext = np.vstack((X.T, 1)).T # the double transpose is due to weird behavior of vstack
-    if not np.allclose(np.dot(s, X_ext.T), preactivations[-1]):
-        # checking whether the computed w gives the same result as the network
-        # gave
-        raise("There was an error computing the weight vector")
+#    if not np.allclose(np.dot(s, X_ext.T), preactivations[-1]):
+#        # checking whether the computed w gives the same result as the network
+#        # gave
+#        raise("There was an error computing the weight vector")
 
     w = s[:, :-1]
-    print(w.shape)
     return w
 
 
@@ -618,16 +608,182 @@ def compute_accuracy(y, y_hat):
         raise("The two inputs didn't have the same shape")
 
 
-# regular mlp
-params["model"] = "mlp"
-params["layer_sizes"] = [100, 100, 10] # as requested by pieter-jan
-mlp, mlp_params = train_network(params)
-mlp_params["input_shape"] = [100]
-mlp_prediction_func = mlp_params["prediction_func"]
 
-params["model"] = "cnn"
-cnn, cnn_params = train_network(params)
-cnn_prediction_func = cnn_params["prediction_func"]
+
+
+def get_W_from_gradients(X, params):
+    input_shape = params["input_shape"]
+    # the shape of output_var is [1, n_output_units]
+    if len(params["input_shape"]) == 1:
+        total_input_shape = input_shape[0]
+    elif len(input_shape) == 2:
+        total_input_shape = input_shape[0] * input_shape[1]
+        X = data_with_dims(X, params["input_shape"])
+    else:
+        raise("Unexpected input shape")
+    W = np.empty((total_input_shape, params["n_output_units"]))
+    for output_idx in range(params["n_output_units"]):
+        gradient = T.grad(params["output_var"][0, 0], params["input_var"])
+        compute_grad = theano.function([params["input_var"]], gradient, allow_input_downcast=True)
+        gradient = compute_grad(X)
+        W[:, output_idx] = gradient.flatten()
+    return W
+
+
+
+
+# RING DATA
+# train MLP on ring data
+params["layer_sizes"] = [20, 20]
+params["data"] = "ring"
+params["model"] = "mlp"
+params["input_dim"] = 2
+params["input_shape"] = (2,)
+params["n_classes"] = 2
+params["n_output_units"] = 2
+network, params = train_network(params)
+
+# create a mesh to plot in
+h = .5 # step size in the mesh
+x_min, x_max = -2, 2
+y_min, y_max = -2, 2
+xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
+                     np.arange(y_min, y_max, h))
+mesh = np.c_[xx.ravel(), yy.ravel()]
+
+plt.figure()
+my_linewidth = 1.5
+shorten_w = 3
+all_vecs = np.empty((len(mesh), 4))
+output_neuron = 0
+for idx in range(len(mesh)):
+    if idx%100 == 0:
+        print("Computing weight vector nr " + str(idx) + " out of " + str(len(mesh)))
+    X_pos = mesh[idx][na, :]
+    w = compute_w(X_pos, network, params)
+    w /= (np.linalg.norm(w) * shorten_w)
+    all_vecs[idx, 0] = X_pos[0, 0]
+    all_vecs[idx, 1] = X_pos[0, 1]
+    all_vecs[idx, 2] = w[output_neuron, 0]
+    all_vecs[idx, 3] = w[output_neuron, 1]
+plt.quiver(all_vecs[:, 0], all_vecs[:, 1], all_vecs[:, 2], all_vecs[:, 3], scale=None)
+
+###### provide the colored background #####
+# create some data for scatterplot
+X, y = create_ring_data(params, params["N_train"])
+# create a mesh to plot in
+h = .01 # step size in the mesh
+x_min, x_max = -2, 2
+y_min, y_max = -2, 2
+xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
+                     np.arange(y_min, y_max, h))
+mesh = np.c_[xx.ravel(), yy.ravel()]
+
+output = lasagne.layers.get_output(network)
+get_output = theano.function([params["input_var"]], output, allow_input_downcast=True)
+Z = get_output(mesh)
+Z = Z[:, output_neuron]
+
+# Put the result into a color plot
+Z = Z.reshape(xx.shape)
+
+#plt.scatter(X[:,0], X[:,1], c=y, cmap="gray", s=40)
+plt.imshow(Z, interpolation="nearest", cmap=cm.gray, alpha=0.4,
+           extent=[x_min, x_max, y_min, y_max])
+plt.xlabel('x')
+plt.ylabel('y')
+plt.xlim(xx.min(), xx.max())
+plt.ylim(yy.min(), yy.max())
+plt.title("Gradients")
+############################################################3
+# colored background end
+
+
+# do the same thing as above but nor for patterns
+# create a mesh to plot in
+h = .5 # step size in the mesh
+x_min, x_max = -2, 2
+y_min, y_max = -2, 2
+xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
+                     np.arange(y_min, y_max, h))
+mesh = np.c_[xx.ravel(), yy.ravel()]
+
+my_linewidth = 1.5
+shorten_w = 3
+all_vecs = np.empty((len(mesh), 4))
+output_neuron = 0
+# get A via Haufe method
+X_train, y_train = create_data(params, 5000)
+y = one_hot_encoding(y_train, params["n_classes"])
+Sigma_s = np.cov(y.T)
+
+#Sigma_s_inv = np.linalg.inv(np.cov(y.T))
+Sigma_X = np.cov(X_train.T)
+shorten_a = shorten_w
+for idx in range(len(mesh)):
+    if idx%100 == 0:
+        print("Computing weight vector nr " + str(idx) + " out of " + str(len(mesh)))
+    X_pos = mesh[idx][na, :]
+    W = get_W_from_gradients(X_pos, params)
+    A_haufe = np.dot(np.dot(Sigma_X, W), Sigma_s)
+#    A_haufe = np.dot(Sigma_X, W)
+    a = A_haufe[:, output_neuron]
+    a /= np.linalg.norm(a) * shorten_a
+    all_vecs[idx, 0] = X_pos[0, 0]
+    all_vecs[idx, 1] = X_pos[0, 1]
+    all_vecs[idx, 2] = a[0]
+    all_vecs[idx, 3] = a[1]
+plt.figure()
+plt.quiver(all_vecs[:, 0], all_vecs[:, 1], all_vecs[:, 2], all_vecs[:, 3], scale=None)
+
+
+###### provide the colored background #####
+# create some data for scatterplot
+X, y = create_ring_data(params, params["N_train"])
+# create a mesh to plot in
+h = .01 # step size in the mesh
+x_min, x_max = -2, 2
+y_min, y_max = -2, 2
+xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
+                     np.arange(y_min, y_max, h))
+mesh = np.c_[xx.ravel(), yy.ravel()]
+
+output = lasagne.layers.get_output(network)
+get_output = theano.function([params["input_var"]], output, allow_input_downcast=True)
+Z = get_output(mesh)
+Z = Z[:, output_neuron]
+
+# Put the result into a color plot
+Z = Z.reshape(xx.shape)
+
+#plt.scatter(X[:,0], X[:,1], c=y, cmap="gray", s=40)
+plt.imshow(Z, interpolation="nearest", cmap=cm.gray, alpha=0.4,
+           extent=[x_min, x_max, y_min, y_max])
+plt.xlabel('x')
+plt.ylabel('y')
+plt.xlim(xx.min(), xx.max())
+plt.ylim(yy.min(), yy.max())
+plt.title("Patterns")
+############################################################3
+# colored background end
+
+# RING DATA END
+
+
+
+
+
+
+## regular mlp
+#params["model"] = "mlp"
+#params["layer_sizes"] = [100, 100, 10] # as requested by pieter-jan
+#mlp, mlp_params = train_network(params)
+#mlp_params["input_shape"] = [100]
+#mlp_prediction_func = mlp_params["prediction_func"]
+#
+#params["model"] = "cnn"
+#cnn, cnn_params = train_network(params)
+#cnn_prediction_func = cnn_params["prediction_func"]
 
 
 ## ### compare prediction scores ###
@@ -673,148 +829,49 @@ cnn_prediction_func = cnn_params["prediction_func"]
 
 
 
-def get_W_from_gradients(X, params):
-    input_shape = params["input_shape"]
-    # the shape of output_var is [1, n_output_units]
-    if len(params["input_shape"]) == 1:
-        total_input_shape = input_shape[0]
-    elif len(input_shape) == 2:
-        total_input_shape = input_shape[0] * input_shape[1]
-        X = data_with_dims(X, params["input_shape"])
-    else:
-        raise("Unexpected input shape")
-    W = np.empty((total_input_shape, params["n_output_units"]))
-    for output_idx in range(params["n_output_units"]):
-        gradient = T.grad(params["output_var"][0, 0], params["input_var"])
-        compute_grad = theano.function([params["input_var"]], gradient)
-        gradient = compute_grad(X)
-        W[:, output_idx] = gradient.flatten()
-    return W
 
-
-# get an input point for which we want the weights / patterns
-params["specific_dataclass"] = 0
-params["input_shape"] = [100]
-X, y = create_data(params, 1)
-X.shape
-
-len(mlp_params["input_shape"])
-
-# get A via Haufe method
-params["specific_dataclass"] = None
-X_train, y_train = create_data(params, 500)
-A = get_horseshoe_pattern(params["horseshoe_distractors"])
-y = one_hot_encoding(y_train, params["n_classes"])
-Sigma_s = np.cov(y.T)
-Sigma_X = np.cov(X_train.T)
-W_mlp = get_W_from_gradients(X, mlp_params)
-A_haufe_mlp = np.dot(np.dot(Sigma_X, W_mlp), Sigma_s)
-W_cnn = get_W_from_gradients(data_with_dims(X, cnn_params["input_shape"]), cnn_params)
-A_haufe_cnn = np.dot(np.dot(Sigma_X, W_cnn), Sigma_s)
-
-# plot real pattern, input point, weights and haufe pattern for MLP
-grad_mlp = W_mlp[:, 0]
-fig, axes = plt.subplots(1, 4)
-plot_heatmap(A[:, 0].reshape((10, 10)), axis=axes[0], title="True A")
-plot_heatmap(X.reshape((10, 10)), axis=axes[1], title="input point")
-plot_heatmap(grad_mlp.reshape((10, 10)), axis=axes[2], title="W")
-plot_heatmap(A_haufe_mlp[:, 0].reshape((10, 10)), axis=axes[3], title="A Haufe 2013")
-plt.suptitle("MLP", size=16)
-plt.show()
-
-# plot real pattern, input point, weights and haufe pattern for CNN
-grad_cnn = W_cnn[:, 0]
-fig, axes = plt.subplots(1, 4)
-plot_heatmap(A[:, 0].reshape((10, 10)), axis=axes[0], title="True A")
-plot_heatmap(X.reshape((10, 10)), axis=axes[1], title="input point")
-plot_heatmap(grad_cnn.reshape((10, 10)), axis=axes[2], title="W")
-plot_heatmap(A_haufe_cnn[:, 0].reshape((10, 10)), axis=axes[3], title="A Haufe 2013")
-plt.suptitle("CNN", size=16)
-plt.show()
-
-
-
-
-
-#get_output = theano.function([params["input_var"]], lasagne.layers.get_output(network))
-#theano.printing.debugprint(mlp_params["output_var"])
-
-# create another example
-#x, y = create_data(params, 4)
+## get an input point for which we want the weights / patterns
+#params["specific_dataclass"] = 0
+#params["input_shape"] = [100]
+#X, y = create_data(params, 1)
+#X.shape
 #
-#fig, axes = plt.subplots(1, 5, figsize=(15, 10))
-## first plotting the input image
-#title = "input image"
-#x_withdims = np.reshape(x[params["dataset"]], (10, 10))
-#plot_heatmap(x_withdims, y[params["dataset"]], axis=axes[0], title=title)
-#for output_neuron in np.arange(4):
-#    title = get_target_title(output_neuron)
-#    x[params["dataset"]].shape
-#    r = compute_relevance(x[params["dataset"]], network, output_neuron, params)
-#    plot_heatmap(r, output_neuron, axes[output_neuron+1], title)
-#    plt.subplots_adjust(wspace=.5)
-#    plt.savefig(open("relevance.png", "w"))
-
-
-######## logistic regression
-#print("performing logistic regression")
-#x_train, y_train = create_data(params, params["n_train"])
-#logreg = logisticregression()
-#logreg.fit(x_train, np.ravel(y_train))
-#coefs = logreg.coef_
-#coefs = np.reshape(coefs, (coefs.shape[0], 10,-1))
-#print("finished logistic regression")
+#len(mlp_params["input_shape"])
 #
-## plot a random input sample
-#plot_heatmap(X_train[0].reshape((10, 10)), title="training image")
-#
-#fig, axes = plt.subplots(1, 4, figsize=(15, 10))
-#for output_neuron in np.arange(4):
-#    title = get_target_title(output_neuron)
-#    plot_heatmap(coefs[output_neuron], axes[output_neuron], title=title)
-##    plt.savefig(open(params["plots_dir"] + "/coefs.png", "w"), dpi=400)
-#
-## plot the result of W.T @ A (the patterns)
-#W = LogReg.coef_.T
-#plot_heatmap(np.dot(W.T, A[:, :4]))
-#
-#
-# plot one of the distractor patterns
-#y_distractor = np.array([[0,0,0,0,0,0,0,1]]).T
-#X_distractor = np.dot(A, y_distractor)
-#plot_heatmap(X_distractor.reshape((10,10)))
-#
-# get A via Haufe method
-#y = one_hot_encoding(y_train.squeeze())
+## get A via Haufe method
+#params["specific_dataclass"] = None
+#X_train, y_train = create_data(params, 500)
+#A = get_horseshoe_pattern(params["horseshoe_distractors"])
+#y = one_hot_encoding(y_train, params["n_classes"])
 #Sigma_s = np.cov(y.T)
 #Sigma_X = np.cov(X_train.T)
-#A_haufe = np.dot(np.dot(Sigma_X, W), Sigma_s)
-
-# check whether the input data looks correct
-#y_class = np.array([[1,0,0,0,0,0,0,0]]).T
-#X_class = np.dot(A, y_class)
-#plot_heatmap(X_class.reshape((10,10)))
-
-#fig, axes = plt.subplots(1, 3, figsize=(15, 10))
-#plot_heatmap(A[:, 0].reshape((10, 10)), axis=axes[0], title="true A")
-#plot_heatmap(W[:, 0].reshape((10, 10)), axis=axes[1], title="LogReg weights")
-#plot_heatmap(A_haufe[:, 0].reshape((10, 10)), axis=axes[2], title="A haufe")
+#W_mlp = get_W_from_gradients(X, mlp_params)
+#A_haufe_mlp = np.dot(np.dot(Sigma_X, W_mlp), Sigma_s)
+#W_cnn = get_W_from_gradients(data_with_dims(X, cnn_params["input_shape"]), cnn_params)
+#A_haufe_cnn = np.dot(np.dot(Sigma_X, W_cnn), Sigma_s)
+#
+## plot real pattern, input point, weights and haufe pattern for MLP
+#grad_mlp = W_mlp[:, 0]
+#fig, axes = plt.subplots(1, 4)
+#plot_heatmap(A[:, 0].reshape((10, 10)), axis=axes[0], title="True A")
+#plot_heatmap(X.reshape((10, 10)), axis=axes[1], title="input point")
+#plot_heatmap(grad_mlp.reshape((10, 10)), axis=axes[2], title="W")
+#plot_heatmap(A_haufe_mlp[:, 0].reshape((10, 10)), axis=axes[3], title="A Haufe 2013")
+#plt.suptitle("MLP", size=16)
+#plt.show()
+#
+## plot real pattern, input point, weights and haufe pattern for CNN
+#grad_cnn = W_cnn[:, 0]
+#fig, axes = plt.subplots(1, 4)
+#plot_heatmap(A[:, 0].reshape((10, 10)), axis=axes[0], title="True A")
+#plot_heatmap(X.reshape((10, 10)), axis=axes[1], title="input point")
+#plot_heatmap(grad_cnn.reshape((10, 10)), axis=axes[2], title="W")
+#plot_heatmap(A_haufe_cnn[:, 0].reshape((10, 10)), axis=axes[3], title="A Haufe 2013")
+#plt.suptitle("CNN", size=16)
 #plt.show()
 
-# comparing manual classification with network output
-#X, y = create_data(params, 200)
 
-#manual_output = manual_classification(X)
-#manual_score = np.sum(manual_output == y)
-#network_output = lasagne.layers.get_output(network)
-#get_network_output = theano.function([params["input_var"]], network_output)
-#network_prediction = np.argmax(get_network_output(X), axis=1)
-#network_score = np.sum(network_prediction == y)
-#logreg_prediction = LogReg.predict(np.reshape(X, (len(X),100)))
-#logreg_score = np.sum(logreg_prediction ==y)
-#print("Manual classification score: " + str(manual_score))
-#print("Network classification score: " + str(network_score))
-#print("LogReg classification score: " + str(logreg_score))
+
 
 
 if params["do_plotting"]:

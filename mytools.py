@@ -12,7 +12,7 @@ def softmax(x):
 def get_CLI_parameters(argv):
     # command line interface
     parser = argparse.ArgumentParser()
-    parser.add_argument("-l", "--loss_choice", default="categorical_crossentropy")
+    parser.add_argument("-l", "--loss_choice", default="MSE")
     parser.add_argument("--noise_scale", default=0.4, type=float)
     parser.add_argument("-e", "--epochs", default=50, type=int)
     parser.add_argument("-m", "--model", default="cnn")
@@ -21,13 +21,13 @@ def get_CLI_parameters(argv):
     parser.add_argument("--verbose", default=True)
     parser.add_argument("-d", "--data", default="horseshoe")
     parser.add_argument("-c", "--n_classes", default="4", type=int)
-    parser.add_argument("--n_output_units", default="4", type=int)
+    parser.add_argument("--n_output_units", default="1", type=int)
     parser.add_argument("-b", "--bias_in_data", default=False)
     parser.add_argument("-r", "--remote", default=False)
     parser.add_argument("-n", "--name", default="default")
 
     params = vars(parser.parse_args(argv[1:]))
-    params["N_train"] = 2000
+    params["N_train"] = 5000
     params["N_val"] = 200
     params["N_test"] = 200
     params["minibatch_size"] = 30
