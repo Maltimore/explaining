@@ -573,7 +573,6 @@ def compute_w(X, network, params):
         S_mats[idx] = np.hstack((S_mats[idx], bias_and_one))
 
         # extend all activations by a 1
-#        import pdb; pdb.set_trace()
         activations[idx+1] = np.vstack((activations[idx+1], 1))
 
         # set the rows in the weight matrix to zero where the activation of the
@@ -632,6 +631,32 @@ def get_W_from_gradients(X, params):
 
 
 
+def plot_background():
+    # create some data for scatterplot
+    X, y = create_ring_data(params, params["N_train"])
+    # create a mesh to plot in
+    h = .01 # step size in the mesh
+    x_min, x_max = -2, 2
+    y_min, y_max = -2, 2
+    xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
+                         np.arange(y_min, y_max, h))
+    mesh = np.c_[xx.ravel(), yy.ravel()]
+
+    output = lasagne.layers.get_output(network)
+    get_output = theano.function([params["input_var"]], output, allow_input_downcast=True)
+    Z = get_output(mesh)
+    Z = Z[:, output_neuron]
+
+    # Put the result into a color plot
+    Z = Z.reshape(xx.shape)
+
+    #plt.scatter(X[:,0], X[:,1], c=y, cmap="gray", s=40)
+    plt.imshow(Z, interpolation="nearest", cmap=cm.gray, alpha=0.4,
+               extent=[x_min, x_max, y_min, y_max])
+    plt.xlim(xx.min(), xx.max())
+    plt.ylim(yy.min(), yy.max())
+
+
 # RING DATA
 # train MLP on ring data
 params["layer_sizes"] = [20, 20]
@@ -643,6 +668,9 @@ params["n_classes"] = 2
 params["n_output_units"] = 2
 network, params = train_network(params)
 
+
+
+
 # create a mesh to plot in
 h = .5 # step size in the mesh
 x_min, x_max = -2, 2
@@ -651,6 +679,8 @@ xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
                      np.arange(y_min, y_max, h))
 mesh = np.c_[xx.ravel(), yy.ravel()]
 
+
+#### plotting weight vectors
 plt.figure()
 my_linewidth = 1.5
 shorten_w = 3
@@ -669,36 +699,13 @@ for idx in range(len(mesh)):
 plt.quiver(all_vecs[:, 0], all_vecs[:, 1], all_vecs[:, 2], all_vecs[:, 3], scale=None)
 
 ###### provide the colored background #####
-# create some data for scatterplot
-X, y = create_ring_data(params, params["N_train"])
-# create a mesh to plot in
-h = .01 # step size in the mesh
-x_min, x_max = -2, 2
-y_min, y_max = -2, 2
-xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
-                     np.arange(y_min, y_max, h))
-mesh = np.c_[xx.ravel(), yy.ravel()]
-
-output = lasagne.layers.get_output(network)
-get_output = theano.function([params["input_var"]], output, allow_input_downcast=True)
-Z = get_output(mesh)
-Z = Z[:, output_neuron]
-
-# Put the result into a color plot
-Z = Z.reshape(xx.shape)
-
-#plt.scatter(X[:,0], X[:,1], c=y, cmap="gray", s=40)
-plt.imshow(Z, interpolation="nearest", cmap=cm.gray, alpha=0.4,
-           extent=[x_min, x_max, y_min, y_max])
-plt.xlabel('x')
-plt.ylabel('y')
-plt.xlim(xx.min(), xx.max())
-plt.ylim(yy.min(), yy.max())
+plot_background()
 plt.title("Gradients")
 ############################################################3
 # colored background end
 
 
+##### plot patterns
 # do the same thing as above but nor for patterns
 # create a mesh to plot in
 h = .5 # step size in the mesh
@@ -715,7 +722,7 @@ output_neuron = 0
 # get A via Haufe method
 X_train, y_train = create_data(params, 5000)
 y = one_hot_encoding(y_train, params["n_classes"])
-Sigma_s = np.cov(y.T)
+Sigma_s = np.cov(y, rowvar=False)
 
 #Sigma_s_inv = np.linalg.inv(np.cov(y.T))
 Sigma_X = np.cov(X_train.T)
@@ -725,10 +732,12 @@ for idx in range(len(mesh)):
         print("Computing weight vector nr " + str(idx) + " out of " + str(len(mesh)))
     X_pos = mesh[idx][na, :]
     W = get_W_from_gradients(X_pos, params)
-    A_haufe = np.dot(np.dot(Sigma_X, W), Sigma_s)
-#    A_haufe = np.dot(Sigma_X, W)
+#    A_haufe = np.dot(np.dot(Sigma_X, W), np.linalg.pinv(Sigma_s))
+    A_haufe = np.dot(Sigma_X, W)
     a = A_haufe[:, output_neuron]
     a /= np.linalg.norm(a) * shorten_a
+    if np.linalg.norm(a) > 2:
+        print("the norm of a was not normalized: " + str(np.linalg.norm(a)))
     all_vecs[idx, 0] = X_pos[0, 0]
     all_vecs[idx, 1] = X_pos[0, 1]
     all_vecs[idx, 2] = a[0]
@@ -738,35 +747,12 @@ plt.quiver(all_vecs[:, 0], all_vecs[:, 1], all_vecs[:, 2], all_vecs[:, 3], scale
 
 
 ###### provide the colored background #####
-# create some data for scatterplot
-X, y = create_ring_data(params, params["N_train"])
-# create a mesh to plot in
-h = .01 # step size in the mesh
-x_min, x_max = -2, 2
-y_min, y_max = -2, 2
-xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
-                     np.arange(y_min, y_max, h))
-mesh = np.c_[xx.ravel(), yy.ravel()]
-
-output = lasagne.layers.get_output(network)
-get_output = theano.function([params["input_var"]], output, allow_input_downcast=True)
-Z = get_output(mesh)
-Z = Z[:, output_neuron]
-
-# Put the result into a color plot
-Z = Z.reshape(xx.shape)
-
-#plt.scatter(X[:,0], X[:,1], c=y, cmap="gray", s=40)
-plt.imshow(Z, interpolation="nearest", cmap=cm.gray, alpha=0.4,
-           extent=[x_min, x_max, y_min, y_max])
-plt.xlabel('x')
-plt.ylabel('y')
-plt.xlim(xx.min(), xx.max())
-plt.ylim(yy.min(), yy.max())
+plot_background()
 plt.title("Patterns")
 ############################################################3
 # colored background end
 
+import pdb; pdb.set_trace()
 # RING DATA END
 
 
