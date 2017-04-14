@@ -618,7 +618,7 @@ def plot_w_or_patterns(what_to_plot):
         W = get_W_from_gradients(X_pos, params)
 
         if what_to_plot=="gradients":
-            plot_vector = W[OUTPUT_NEURON_SELECTED]
+            plot_vector = W[:, OUTPUT_NEURON_SELECTED]
             plot_vector /= np.linalg.norm(plot_vector) * VECTOR_ADJUST_CONSTANT
         elif what_to_plot== "patterns":
 #            A_haufe = np.dot(np.dot(Sigma_X, W), np.linalg.pinv(Sigma_s))
@@ -628,6 +628,8 @@ def plot_w_or_patterns(what_to_plot):
             if np.linalg.norm(a) > 2:
                 print("the norm of a was not normalized: " + str(np.linalg.norm(a)))
             plot_vector = a
+        else:
+            raise Exception("Choose gradients or patterns for what_to_plot")
 
         all_vecs[idx, 0] = X_pos[0, 0]
         all_vecs[idx, 1] = X_pos[0, 1]
