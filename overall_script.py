@@ -225,7 +225,7 @@ def build_mlp(params, input_var=None):
 
         l_out = lasagne.layers.DenseLayer(
                 current_layer, num_units=params["n_output_units"],
-                nonlinearity=lasagne.nonlinearities.linear)
+                nonlinearity=lasagne.nonlinearities.softmax)
     return l_out
 
 
@@ -349,7 +349,6 @@ def train_network(params):
     params["output_var"] = output_var
     params["get_output"] = theano.function([input_var], output_var, allow_input_downcast=True)
 
-    import pdb; pdb.set_trace()
 
     # Create an expression for the classification accuracy:
     if params["n_output_units"] == 2:
@@ -541,23 +540,24 @@ def compute_accuracy(y, y_hat):
 
 def get_W_from_gradients(X, params):
     """
-    Returns W of shape [total_input_shape, n_output_units]
+    Returns W of shape [n_features, n_output_units]
+    In other words, W contains the gradients in the columns
+    (and there are as many gradients as there are output units)
     """
 
     # input shape handling
     input_shape = params["input_shape"]
     # the shape of output_var is [1, n_output_units]
     if len(params["input_shape"]) == 1:
-        total_input_shape = input_shape[0]
+        n_features = input_shape[0]
     elif len(input_shape) == 2:
-        total_input_shape = input_shape[0] * input_shape[1]
+        n_features = input_shape[0] * input_shape[1]
         X = data_with_dims(X, params["input_shape"])
     else:
         raise("Unexpected input shape")
 
-    W = np.empty((total_input_shape, params["n_output_units"]))
+    W = np.empty((n_features, params["n_output_units"]))
     for output_idx in range(params["n_output_units"]):
-        import pdb; pdb.set_trace()
         gradient = T.grad(params["output_var"][0, 0], params["input_var"])
         compute_grad = theano.function([params["input_var"]], gradient, allow_input_downcast=True)
         gradient = compute_grad(X)
