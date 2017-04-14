@@ -558,8 +558,8 @@ def get_W_from_gradients(X, params):
 
     W = np.empty((n_features, params["n_output_units"]))
     for output_idx in range(params["n_output_units"]):
-        gradient = T.grad(params["output_var"][0, 0], params["input_var"])
-        compute_grad = theano.function([params["input_var"]], gradient, allow_input_downcast=True)
+        gradient_var = T.grad(params["output_var"][0, output_idx], params["input_var"])
+        compute_grad = theano.function([params["input_var"]], gradient_var, allow_input_downcast=True)
         gradient = compute_grad(X)
         W[:, output_idx] = gradient.flatten()
     return W
