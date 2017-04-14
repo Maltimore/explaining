@@ -295,11 +295,11 @@ def train_network(params):
             target_var = T.matrix('targets')
             network = build_cnn(params, input_var)
 
-        output = lasagne.layers.get_output(network)
+        output_var = lasagne.layers.get_output(network)
         if params["n_classes"] == 2:
-            loss = lasagne.objectives.binary_crossentropy(output, target_var)
+            loss = lasagne.objectives.binary_crossentropy(output_var, target_var)
         else:
-            loss = lasagne.objectives.categorical_crossentropy(output, target_var)
+            loss = lasagne.objectives.categorical_crossentropy(output_var, target_var)
         loss = loss.mean()
 
         # Create update expressions for training, i.e., how to modify the
@@ -312,7 +312,7 @@ def train_network(params):
         # Create a loss expression for validation/testing. The crucial difference
         # here is that we do a deterministic forward pass through the network,
         # disabling dropout layers.
-        test_loss = lasagne.objectives.categorical_crossentropy(output,
+        test_loss = lasagne.objectives.categorical_crossentropy(output_var,
                                                                 target_var)
         test_loss = test_loss.mean()
 
@@ -325,9 +325,9 @@ def train_network(params):
         if params["model"] == 'mlp':
             network = build_mlp(params, input_var)
 
-        output = lasagne.layers.get_output(network)
+        output_var = lasagne.layers.get_output(network)
 
-        loss = lasagne.objectives.squared_error(output, target_var)
+        loss = lasagne.objectives.squared_error(output_var, target_var)
         loss = loss.mean()
 
         # Create update expressions for training, i.e., how to modify the
@@ -340,21 +340,22 @@ def train_network(params):
         # Create a loss expression for validation/testing. The crucial difference
         # here is that we do a deterministic forward pass through the network,
         # disabling dropout layers.
-        test_loss = lasagne.objectives.squared_error(output, target_var)
+        test_loss = lasagne.objectives.squared_error(output_var, target_var)
         test_loss = test_loss.mean()
 
     # save some useful variables and functions into the params dict
     params["input_var"] = input_var
     params["target_var"] = target_var
-    params["output_var"] = output
-    params["get_output"] = theano.function([input_var], output)
+    params["output_var"] = output_var
+    params["get_output"] = theano.function([input_var], output_var, allow_input_downcast=True)
 
+    import pdb; pdb.set_trace()
 
-    # As a bonus, also create an expression for the classification accuracy:
+    # Create an expression for the classification accuracy:
     if params["n_output_units"] == 2:
-        prediction_var = T.round(output)
+        prediction_var = T.round(output_var)
     else:
-        prediction_var = T.shape_padaxis(T.argmax(output, axis=1), 1)
+        prediction_var = T.shape_padaxis(T.argmax(output_var, axis=1), 1)
 
     params["prediction_func"] = theano.function([input_var], prediction_var, allow_input_downcast=True)
 
@@ -367,7 +368,9 @@ def train_network(params):
     def val_fn(X, y):
         y_hat = params["prediction_func"](X)
 
-        # transform from one-hot into scalar int if necessary
+        # transform prediction from one-hot into scalar int if necessary
+        # remember that both the prediction y_hat and the targets y 
+        # are in one hot encoding
         if y_hat.shape[1] > 1:
             y_hat = np.argmax(y_hat, axis=1)
             y = np.argmax(y, axis=1)
@@ -524,78 +527,6 @@ def compute_relevance(func_input, network, output_neuron, params, epsilon = .01)
     return R
 
 
-def manual_classification(X):
-    """ Performs a manual classification of the horseshoe data
-        using knowledge of the data creation process
-        Input: X of shape (samples, width, height)
-    """
-    def single_classification(func_input):
-        left_bar = np.sum(func_input[3:7, 2])
-        right_bar = np.sum(func_input[3:7, 7])
-        upper_bar = np.sum(func_input[2, 3:7])
-        lower_bar = np.sum(func_input[7, 3:7])
-
-        left_open = right_bar + upper_bar + lower_bar
-        right_open = left_bar + upper_bar + lower_bar
-        up_open = left_bar + right_bar + lower_bar
-        low_open = left_bar + right_bar + upper_bar
-        return np.argmax([left_open, right_open, up_open, low_open])
-
-    manual_prediction = np.empty((len(X)))
-    for idx in range(len(X)):
-        # do manual classification by summing over bars
-        manual_prediction[idx] = single_classification(X[idx])
-
-    # bring into column vector shape and cast to int
-    manual_prediction = manual_prediction[:, na].astype(int)
-    return manual_prediction
-
-
-def compute_w(X, network, params):
-    activations = forward_pass(X, network, params["input_var"], params)
-    W_mats, biases = get_network_parameters(network, params["bias_in_data"])
-    S_mats = copy.deepcopy(W_mats)
-
-    # --- forward propagation to compute preactivations ---
-    # this is not strictly necessary to compute, I only use it to verify that
-    # what the output of the computed weight vector is correct
-    preactivations = []
-    for W, b, a in zip(W_mats, biases, activations):
-        preactivation = np.dot(W, a) + b
-        preactivations.append(preactivation)
-    # -----------------------------------------------------
-
-    for idx in range(len(S_mats)):
-        # extend the weight matrices with a row of zeroes below (last element a 1),
-        # and a column to the right in which there are the biases of the next layer.
-        S_mats[idx] = np.vstack((S_mats[idx], np.zeros(S_mats[idx].shape[1])[na, :]))
-        bias_and_one = np.vstack((biases[idx], 1))
-        S_mats[idx] = np.hstack((S_mats[idx], bias_and_one))
-
-        # extend all activations by a 1
-        activations[idx+1] = np.vstack((activations[idx+1], 1))
-
-        # set the rows in the weight matrix to zero where the activation of the
-        # neuron in the layer that this matrix produced was zero
-        if idx < len(S_mats)-1:
-            S_mats[idx][activations[idx+1].squeeze() < 0.000001, :] = 0
-
-    # for the weight matrix to the last layer we don't need to incorporate the bias
-    S_mats[-1] = S_mats[-1][:-1, :]
-
-    s = S_mats[0]
-    for idx in range(1, len(S_mats)):
-        s = np.dot(S_mats[idx], s)
-
-    X_ext = np.vstack((X.T, 1)).T # the double transpose is due to weird behavior of vstack
-#    if not np.allclose(np.dot(s, X_ext.T), preactivations[-1]):
-#        # checking whether the computed w gives the same result as the network
-#        # gave
-#        raise("There was an error computing the weight vector")
-
-    w = s[:, :-1]
-    return w
-
 
 def compute_accuracy(y, y_hat):
     """ Compute the percentage of correct classifications """
@@ -608,9 +539,12 @@ def compute_accuracy(y, y_hat):
 
 
 
-
-
 def get_W_from_gradients(X, params):
+    """
+    Returns W of shape [total_input_shape, n_output_units]
+    """
+
+    # input shape handling
     input_shape = params["input_shape"]
     # the shape of output_var is [1, n_output_units]
     if len(params["input_shape"]) == 1:
@@ -620,8 +554,10 @@ def get_W_from_gradients(X, params):
         X = data_with_dims(X, params["input_shape"])
     else:
         raise("Unexpected input shape")
+
     W = np.empty((total_input_shape, params["n_output_units"]))
     for output_idx in range(params["n_output_units"]):
+        import pdb; pdb.set_trace()
         gradient = T.grad(params["output_var"][0, 0], params["input_var"])
         compute_grad = theano.function([params["input_var"]], gradient, allow_input_downcast=True)
         gradient = compute_grad(X)
@@ -645,7 +581,7 @@ def plot_background():
     output = lasagne.layers.get_output(network)
     get_output = theano.function([params["input_var"]], output, allow_input_downcast=True)
     Z = get_output(mesh)
-    Z = Z[:, output_neuron]
+    Z = Z[:, OUTPUT_NEURON_SELECTED]
 
     # Put the result into a color plot
     Z = Z.reshape(xx.shape)
@@ -655,6 +591,54 @@ def plot_background():
                extent=[x_min, x_max, y_min, y_max])
     plt.xlim(xx.min(), xx.max())
     plt.ylim(yy.min(), yy.max())
+
+
+def plot_w_or_patterns(what_to_plot):
+    # create a mesh to plot in
+    h = .3 # step size in the mesh
+    x_min, x_max = -2, 2
+    y_min, y_max = -2, 2
+    xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
+                         np.arange(y_min, y_max, h))
+    mesh = np.c_[xx.ravel(), yy.ravel()]
+
+    my_linewidth = 1.5
+    all_vecs = np.empty((len(mesh), 4))
+    # get A via Haufe method
+    X_train, y_train = create_data(params, 5000)
+    y = one_hot_encoding(y_train, params["n_classes"])
+    Sigma_s = np.cov(y, rowvar=False)
+
+    #Sigma_s_inv = np.linalg.inv(np.cov(y.T))
+    Sigma_X = np.cov(X_train.T)
+    for idx in range(len(mesh)):
+        if idx%100 == 0:
+            print("Computing weight vector nr " + str(idx) + " out of " + str(len(mesh)))
+        X_pos = mesh[idx][na, :]
+        W = get_W_from_gradients(X_pos, params)
+
+        if what_to_plot=="gradients":
+            plot_vector = W[OUTPUT_NEURON_SELECTED]
+            plot_vector /= np.linalg.norm(plot_vector) * VECTOR_ADJUST_CONSTANT
+        elif what_to_plot== "patterns":
+#            A_haufe = np.dot(np.dot(Sigma_X, W), np.linalg.pinv(Sigma_s))
+            A_haufe = np.dot(Sigma_X, W)
+            a = A_haufe[:, OUTPUT_NEURON_SELECTED]
+            a /= np.linalg.norm(a) * VECTOR_ADJUST_CONSTANT
+            if np.linalg.norm(a) > 2:
+                print("the norm of a was not normalized: " + str(np.linalg.norm(a)))
+            plot_vector = a
+
+        all_vecs[idx, 0] = X_pos[0, 0]
+        all_vecs[idx, 1] = X_pos[0, 1]
+        all_vecs[idx, 2] = plot_vector[0]
+        all_vecs[idx, 3] = plot_vector[1]
+    plt.figure()
+    plt.quiver(all_vecs[:, 0], all_vecs[:, 1], all_vecs[:, 2], all_vecs[:, 3], scale=None)
+
+    # plot background
+    plot_background()
+    plt.title(what_to_plot)
 
 
 # RING DATA
@@ -667,93 +651,15 @@ params["input_shape"] = (2,)
 params["n_classes"] = 2
 params["n_output_units"] = 2
 network, params = train_network(params)
+OUTPUT_NEURON_SELECTED = 1
+VECTOR_ADJUST_CONSTANT = 3
 
 
 
 
-# create a mesh to plot in
-h = .5 # step size in the mesh
-x_min, x_max = -2, 2
-y_min, y_max = -2, 2
-xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
-                     np.arange(y_min, y_max, h))
-mesh = np.c_[xx.ravel(), yy.ravel()]
 
-
-#### plotting weight vectors
-plt.figure()
-my_linewidth = 1.5
-shorten_w = 3
-all_vecs = np.empty((len(mesh), 4))
-output_neuron = 0
-for idx in range(len(mesh)):
-    if idx%100 == 0:
-        print("Computing weight vector nr " + str(idx) + " out of " + str(len(mesh)))
-    X_pos = mesh[idx][na, :]
-    w = compute_w(X_pos, network, params)
-    w /= (np.linalg.norm(w) * shorten_w)
-    all_vecs[idx, 0] = X_pos[0, 0]
-    all_vecs[idx, 1] = X_pos[0, 1]
-    all_vecs[idx, 2] = w[output_neuron, 0]
-    all_vecs[idx, 3] = w[output_neuron, 1]
-plt.quiver(all_vecs[:, 0], all_vecs[:, 1], all_vecs[:, 2], all_vecs[:, 3], scale=None)
-
-###### provide the colored background #####
-plot_background()
-plt.title("Gradients")
-############################################################3
-# colored background end
-
-
-##### plot patterns
-# do the same thing as above but nor for patterns
-# create a mesh to plot in
-h = .5 # step size in the mesh
-x_min, x_max = -2, 2
-y_min, y_max = -2, 2
-xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
-                     np.arange(y_min, y_max, h))
-mesh = np.c_[xx.ravel(), yy.ravel()]
-
-my_linewidth = 1.5
-shorten_w = 3
-all_vecs = np.empty((len(mesh), 4))
-output_neuron = 0
-# get A via Haufe method
-X_train, y_train = create_data(params, 5000)
-y = one_hot_encoding(y_train, params["n_classes"])
-Sigma_s = np.cov(y, rowvar=False)
-
-#Sigma_s_inv = np.linalg.inv(np.cov(y.T))
-Sigma_X = np.cov(X_train.T)
-shorten_a = shorten_w
-for idx in range(len(mesh)):
-    if idx%100 == 0:
-        print("Computing weight vector nr " + str(idx) + " out of " + str(len(mesh)))
-    X_pos = mesh[idx][na, :]
-    W = get_W_from_gradients(X_pos, params)
-#    A_haufe = np.dot(np.dot(Sigma_X, W), np.linalg.pinv(Sigma_s))
-    A_haufe = np.dot(Sigma_X, W)
-    a = A_haufe[:, output_neuron]
-    a /= np.linalg.norm(a) * shorten_a
-    if np.linalg.norm(a) > 2:
-        print("the norm of a was not normalized: " + str(np.linalg.norm(a)))
-    all_vecs[idx, 0] = X_pos[0, 0]
-    all_vecs[idx, 1] = X_pos[0, 1]
-    all_vecs[idx, 2] = a[0]
-    all_vecs[idx, 3] = a[1]
-plt.figure()
-plt.quiver(all_vecs[:, 0], all_vecs[:, 1], all_vecs[:, 2], all_vecs[:, 3], scale=None)
-
-
-###### provide the colored background #####
-plot_background()
-plt.title("Patterns")
-############################################################3
-# colored background end
-
-import pdb; pdb.set_trace()
-# RING DATA END
+plot_w_or_patterns(what_to_plot="gradients")
+plot_w_or_patterns(what_to_plot="patterns")
 
 
 
