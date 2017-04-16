@@ -595,9 +595,9 @@ def plot_background():
 
 def plot_w_or_patterns(what_to_plot):
     # create a mesh to plot in
-    h = .3 # step size in the mesh
-    x_min, x_max = -2, 2
-    y_min, y_max = -2, 2
+    h = .5 # step size in the mesh
+    x_min, x_max = -2, 2 + h
+    y_min, y_max = -2, 2 + h
     xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
                          np.arange(y_min, y_max, h))
     mesh = np.c_[xx.ravel(), yy.ravel()]
@@ -617,30 +617,18 @@ def plot_w_or_patterns(what_to_plot):
         X_pos = mesh[idx][na, :]
         W = get_W_from_gradients(X_pos, params)
 
-        if what_to_plot=="gradients":
+        if what_to_plot == "gradients":
             plot_vector = W[:, OUTPUT_NEURON_SELECTED]
             plot_vector /= np.linalg.norm(plot_vector) * VECTOR_ADJUST_CONSTANT
-        elif what_to_plot== "patterns":
-#            A_haufe = np.dot(np.dot(Sigma_X, W), np.linalg.pinv(Sigma_s))
-            A_haufe = np.dot(Sigma_X, W)
-            a = A_haufe[:, OUTPUT_NEURON_SELECTED]
-            a /= np.linalg.norm(a) * VECTOR_ADJUST_CONSTANT
-            if np.linalg.norm(a) > 2:
-                print("the norm of a was not normalized: " + str(np.linalg.norm(a)))
-            plot_vector = a
+        elif what_to_plot == "patterns":
+            A_haufe = np.dot(np.dot(Sigma_X, W), np.linalg.pinv(Sigma_s))
+#            A_haufe = np.dot(Sigma_X, W)
+            plot_vector = A_haufe[:, OUTPUT_NEURON_SELECTED]
+            plot_vector /= np.linalg.norm(plot_vector) * VECTOR_ADJUST_CONSTANT
         else:
             raise Exception("Choose gradients or patterns for what_to_plot")
+        plt.quiver(X_pos[0, 0], X_pos[0, 1], plot_vector[0], plot_vector[1], scale=None)
 
-        all_vecs[idx, 0] = X_pos[0, 0]
-        all_vecs[idx, 1] = X_pos[0, 1]
-        all_vecs[idx, 2] = plot_vector[0]
-        all_vecs[idx, 3] = plot_vector[1]
-    plt.figure()
-    plt.quiver(all_vecs[:, 0], all_vecs[:, 1], all_vecs[:, 2], all_vecs[:, 3], scale=None)
-
-    # plot background
-    plot_background()
-    plt.title(what_to_plot)
 
 
 # RING DATA
@@ -659,9 +647,19 @@ VECTOR_ADJUST_CONSTANT = 3
 
 
 
-
+# GRADIENTS
+plt.figure()
 plot_w_or_patterns(what_to_plot="gradients")
+# plot background
+plot_background()
+plt.title("gradients")
+
+# PATTERNS
+plt.figure()
 plot_w_or_patterns(what_to_plot="patterns")
+# plot background
+plot_background()
+plt.title("patterns")
 
 
 
