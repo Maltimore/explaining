@@ -343,11 +343,11 @@ def train_network(params):
 
     # Compile a second function computing the validation loss and accuracy:
     def val_fn(X, y):
-        y_hat = params["prediction_func"](X)
-        y_hat = np.argmax(y_hat, axis=1)
+        y_hat = params["prediction_func"](X).squeeze()
+#        y_hat = np.argmax(y_hat, axis=1)
         y = np.argmax(y, axis=1)
+#        y_hat = np.argmax(y_hat, axis=1)
         return np.sum(y_hat == y) / y.shape[0]
-
 
     ############################################################################
     # TRAINING LOOP
@@ -382,8 +382,6 @@ def train_network(params):
                 print("Epoch {} of {} took {:.3f}s".format(
                     epoch + 1, params["epochs"], time.time() - start_time))
                 print("  training loss:\t\t{:.6f}".format(train_err / train_batches))
-
-
                 print("  validation accuracy:\t\t{:.2f} %".format(
                     val_acc / val_batches * 100))
 
@@ -498,7 +496,6 @@ def compute_relevance(func_input, network, output_neuron, params, epsilon = .01)
     return R
 
 
-
 def compute_accuracy(y, y_hat):
     """ Compute the percentage of correct classifications """
     if y.shape == y_hat.shape:
@@ -507,7 +504,6 @@ def compute_accuracy(y, y_hat):
         return p_correct
     else:
         raise("The two inputs didn't have the same shape")
-
 
 
 def get_W_from_gradients(X, params):
@@ -535,8 +531,6 @@ def get_W_from_gradients(X, params):
         gradient = compute_grad(X)
         W[:, output_idx] = gradient.flatten()
     return W
-
-
 
 
 def plot_background():
