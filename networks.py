@@ -14,12 +14,9 @@ def build_custom_ringpredictor(params, input_var=None):
 
     # Hidden layer
     current_layer = lasagne.layers.DenseLayer(
-        current_layer, num_units=layer_size,
-        nonlinearity=lasagne.nonlinearities.rectify,
-        W=lasagne.init.GlorotUniform(),
-        b=bias)
+        current_layer, num_units=2,
+        W=precomputed_W
+        b=None)
 
-    l_out = lasagne.layers.DenseLayer(
-            current_layer, num_units=params["n_output_units"],
-            nonlinearity=lasagne.nonlinearities.linear)
+    l_out = lasagne.layers.FeatureWTALayer(current_layer, pool_size=1)
     return l_out

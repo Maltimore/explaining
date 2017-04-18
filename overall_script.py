@@ -491,7 +491,7 @@ def get_network_parameters(network, bias_in_data):
 
     for idx in range(len(W_mats)):
         W_mats[idx] = W_mats[idx].T
-        if not params["bias_in_data"]:
+        if not bias_in_data:
             biases[idx] = np.atleast_2d(biases[idx]).T
 
     if bias_in_data:
