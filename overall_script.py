@@ -200,15 +200,8 @@ def create_ring_data(params, N):
 
 
 def build_mlp(params, input_var=None):
-    # Input layer
-    if params["bias_in_data"]:
-        bias = None
-        current_layer = lasagne.layers.InputLayer(shape=(None, params["input_dim"]+1),
-                                        input_var=input_var, b=bias)
-    else:
-        bias = lasagne.init.Constant(0.)
-        current_layer = lasagne.layers.InputLayer(shape=(None, params["input_dim"]),
-                                        input_var=input_var, b=bias)
+    current_layer = lasagne.layers.InputLayer(shape=(None, params["input_dim"]),
+                                    input_var=input_var)
     # Hidden layers
     for layer_size in params["layer_sizes"]:
         if layer_size == 0:
@@ -217,8 +210,7 @@ def build_mlp(params, input_var=None):
         current_layer = lasagne.layers.DenseLayer(
             current_layer, num_units=layer_size,
             nonlinearity=lasagne.nonlinearities.rectify,
-            W=lasagne.init.GlorotUniform(),
-            b=bias)
+            W=lasagne.init.GlorotUniform())
 
     l_out = lasagne.layers.DenseLayer(
             current_layer, num_units=params["n_output_units"],
@@ -229,9 +221,9 @@ def build_mlp(params, input_var=None):
 def build_cnn(params, input_var):
     # Input layer
     current_layer = lasagne.layers.InputLayer(shape=(None,
-                                                    1,
-                                                    params["input_shape"][0],
-                                                    params["input_shape"][1]),
+                                                     1,
+                                                     params["input_shape"][0],
+                                                     params["input_shape"][1]),
                                             input_var=input_var)
     # Hidden layers
     n_filters = 15
