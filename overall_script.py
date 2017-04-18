@@ -1,17 +1,5 @@
-import argparse
 import sys
-import os
 import importlib
-import mytools
-importlib.reload(mytools)
-
-if __name__ == "__main__" and "-f" not in sys.argv:
-    params = mytools.get_CLI_parameters(sys.argv)
-else:
-    params = mytools.get_CLI_parameters("".split())
-
-# the import statements aren't all at the beginning because some things are
-# imported based on the command line inputs
 import time
 import numpy as np
 import theano
@@ -19,8 +7,6 @@ import theano.tensor as T
 theano.config.optimizer = "None"
 import lasagne
 import matplotlib
-if params["remote"]:
-    matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from sklearn.linear_model import LogisticRegression
@@ -28,6 +14,16 @@ import copy
 import pickle
 import pdb
 na = np.newaxis
+
+# imports from this project
+import mytools
+import networks
+importlib.reload(mytools)
+if __name__ == "__main__" and "-f" not in sys.argv:
+    params = mytools.get_CLI_parameters(sys.argv)
+else:
+    params = mytools.get_CLI_parameters("".split())
+
 
 def one_hot_encoding(target, n_classes):
     if target.shape[1] > 1:
