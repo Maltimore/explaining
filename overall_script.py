@@ -279,6 +279,10 @@ def train_network(params):
             input_var = T.tensor4('cnn_inputs')
             target_var = T.matrix('targets')
             network = build_cnn(params, input_var)
+        elif params["model"] == "custom":
+            input_var = T.matrix('mlp_inputs')
+            target_var = T.matrix('targets')
+            network = networks.build_custom_ringpredictor(params, input_var)
 
         output_var = lasagne.layers.get_output(network)
         if params["n_classes"] == 2:
@@ -334,7 +338,9 @@ def train_network(params):
     params["output_var"] = output_var
     params["get_output"] = theano.function([input_var], output_var, allow_input_downcast=True)
 
-
+    # DEBUG
+    params["get_output"](X_train[[0]])
+#    import pdb; pdb.set_trace()
     # Create an expression for the classification accuracy:
     if params["n_output_units"] == 2:
         prediction_var = T.round(output_var)
@@ -346,7 +352,7 @@ def train_network(params):
 
     # Compile a function performing a training step on a mini-batch (by giving
     # the updates dictionary) and returning the corresponding training loss:
-    train_fn = theano.function([input_var, target_var], loss, updates=updates, allow_input_downcast=True)
+#    train_fn = theano.function([input_var, target_var], loss, updates=updates, allow_input_downcast=True)
 
     # Compile a second function computing the validation loss and accuracy:
     def val_fn(X, y):
@@ -375,7 +381,7 @@ def train_network(params):
             inputs, targets = batch
             if params["model"] == "cnn":
                 inputs = data_with_dims(inputs, params["input_shape"])
-            train_err += train_fn(inputs, targets)
+#            train_err += train_fn(inputs, targets)
             train_batches += 1
 
         # And a full pass over the validation data:
@@ -620,11 +626,12 @@ def plot_w_or_patterns(what_to_plot):
 # train MLP on ring data
 params["layer_sizes"] = [20, 20]
 params["data"] = "ring"
-params["model"] = "mlp"
+params["model"] = "custom"
 params["input_dim"] = 2
 params["input_shape"] = (2,)
 params["n_classes"] = 2
 params["n_output_units"] = 2
+networks.build_custom_ringpredictor(params)
 network, params = train_network(params)
 OUTPUT_NEURON_SELECTED = 1
 VECTOR_ADJUST_CONSTANT = 3
