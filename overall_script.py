@@ -1,23 +1,19 @@
 import sys
-import importlib
 import time
 import numpy as np
 import theano
 import theano.tensor as T
-theano.config.optimizer = "None"
 import lasagne
-import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from sklearn.linear_model import LogisticRegression
 import copy
-import pickle
-import pdb
 na = np.newaxis
 
 # imports from this project
 import mytools
 import networks
+theano.config.optimizer = "None"
 
 if __name__ == "__main__" and "-f" not in sys.argv:
     params = mytools.get_CLI_parameters(sys.argv)
@@ -550,15 +546,13 @@ def plot_background():
 
 def plot_w_or_patterns(what_to_plot):
     # create a mesh to plot in
-    h = .4 # step size in the mesh
+    h = .2 # step size in the mesh
     x_min, x_max = -2, 2 + h
     y_min, y_max = -2, 2 + h
     xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
                          np.arange(y_min, y_max, h))
     mesh = np.c_[xx.ravel(), yy.ravel()]
 
-    my_linewidth = 1.5
-    all_vecs = np.empty((len(mesh), 4))
     # get A via Haufe method
     X_train, y_train = create_data(params, 5000)
     y = one_hot_encoding(y_train, params["n_classes"])
@@ -576,8 +570,9 @@ def plot_w_or_patterns(what_to_plot):
             plot_vector = W[:, OUTPUT_NEURON_SELECTED]
             plot_vector /= np.linalg.norm(plot_vector) * VECTOR_ADJUST_CONSTANT
         elif what_to_plot == "patterns":
+            # compute A from the Haufe paper.
+            # The columns of A are the activation patterns
             A_haufe = np.dot(np.dot(Sigma_X, W), np.linalg.pinv(Sigma_s))
-#            A_haufe = np.dot(Sigma_X, W)
             plot_vector = A_haufe[:, OUTPUT_NEURON_SELECTED]
             plot_vector /= np.linalg.norm(plot_vector) * VECTOR_ADJUST_CONSTANT
         else:
