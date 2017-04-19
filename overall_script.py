@@ -332,7 +332,6 @@ def train_network(params):
     params["output_var"] = output_var
     params["get_output"] = theano.function([input_var], output_var, allow_input_downcast=True)
 
-
     # Create an expression for the classification accuracy:
     prediction_var = T.shape_padaxis(T.argmax(output_var, axis=1), 1)
     params["prediction_func"] = theano.function([input_var], prediction_var, allow_input_downcast=True)
@@ -344,9 +343,7 @@ def train_network(params):
     # Compile a second function computing the validation loss and accuracy:
     def val_fn(X, y):
         y_hat = params["prediction_func"](X).squeeze()
-#        y_hat = np.argmax(y_hat, axis=1)
         y = np.argmax(y, axis=1)
-#        y_hat = np.argmax(y_hat, axis=1)
         return np.sum(y_hat == y) / y.shape[0]
 
     ############################################################################
