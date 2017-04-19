@@ -44,15 +44,10 @@ def transform_target(target, params):
     """ Transforms the target from an int value to other target choices
         like one-hot
     """
-    if "n_output_units" in params:
-        n_output_units = params["n_output_units"]
-    else:
-        n_output_units = params["n_classes"]
-
     if params["loss_choice"] == "categorical_crossentropy":
-        return one_hot_encoding(target, n_output_units)
+        return one_hot_encoding(target, params["n_classes"])
     elif params["loss_choice"] == "MSE":
-        return one_minus_one_encoding(target, n_output_units)
+        return one_minus_one_encoding(target,params["n_classes"])
 
 
 def data_with_dims(X, input_shape):
@@ -151,11 +146,9 @@ def create_horseshoe_data(params, N):
         # if no specific class is requested, generate classes randomly
         y_true = np.random.randint(low=0, high=4, size=N)[:, na]
 
-    y = one_hot_encoding(y_true, params["n_output_units"]).T
+    y = one_hot_encoding(y_true, params["n_classes"]).T
 
     if params["horseshoe_distractors"]:
-#        y_dist = np.random.randint(low=0, high=4, size=N)[:, na]
-#        y_dist_onehot = one_hot_encoding(y_dist, params["n_output_units"])
         y_dist = np.random.normal(size=(4, N))
         y = np.concatenate((y, y_dist), axis=0)
 
@@ -243,15 +236,16 @@ def build_cnn(params, input_var):
 
 
 def iterate_minibatches(inputs, targets, batchsize, shuffle=False):
+    """
+    this function makes no assumption about the shape of inputs and 
+    targets. It just assumes that they have the same length.
+    """
     assert len(inputs) == len(targets)
+    indices = np.arange(len(inputs))
     if shuffle:
-        indices = np.arange(len(inputs))
         np.random.shuffle(indices)
     for start_idx in range(0, len(inputs) - batchsize + 1, batchsize):
-        if shuffle:
-            excerpt = indices[start_idx:start_idx + batchsize]
-        else:
-            excerpt = slice(start_idx, start_idx + batchsize)
+        excerpt = indices[start_idx:start_idx + batchsize]
         yield inputs[excerpt], targets[excerpt]
 
 
@@ -260,24 +254,18 @@ def train_network(params):
     X_train, y_train= create_data(params, params["N_train"])
     X_val, y_val= create_data(params, params["N_val"])
     X_test, y_test= create_data(params, params["N_test"])
-    if params["n_output_units"] > 1:
-        y_train = transform_target(y_train, params)
-        y_val = transform_target(y_val, params)
-        y_test = transform_target(y_test, params)
-
-    target_int_var = T.matrix('target_int')
+    # one hot encoding of target
+    y_train = transform_target(y_train, params)
+    y_val = transform_target(y_val, params)
+    y_test = transform_target(y_test, params)
 
     if params["loss_choice"] == "categorical_crossentropy":
         print("Building model and compiling functions...")
+        input_var = T.tensor4('inputs')
+        target_var = T.matrix('targets')
         if params["model"] == 'mlp':
-            # Prepare Theano variables for inputs and targets
-            input_var = T.matrix('mlp_inputs')
-            target_var = T.matrix('targets')
             network = build_mlp(params, input_var)
         elif params["model"] == "cnn":
-            # Prepare Theano variables for inputs and targets
-            input_var = T.tensor4('cnn_inputs')
-            target_var = T.matrix('targets')
             network = build_cnn(params, input_var)
         elif params["model"] == "custom":
             input_var = T.matrix('mlp_inputs')
@@ -285,10 +273,7 @@ def train_network(params):
             network = networks.build_custom_ringpredictor(params, input_var)
 
         output_var = lasagne.layers.get_output(network)
-        if params["n_classes"] == 2:
-            loss = lasagne.objectives.binary_crossentropy(output_var, target_var)
-        else:
-            loss = lasagne.objectives.categorical_crossentropy(output_var, target_var)
+        loss = lasagne.objectives.categorical_crossentropy(output_var, target_var)
         loss = loss.mean()
 
         # Create update expressions for training, i.e., how to modify the
@@ -301,8 +286,7 @@ def train_network(params):
         # Create a loss expression for validation/testing. The crucial difference
         # here is that we do a deterministic forward pass through the network,
         # disabling dropout layers.
-        test_loss = lasagne.objectives.categorical_crossentropy(output_var,
-                                                                target_var)
+        test_loss = lasagne.objectives.categorical_crossentropy(output_var, target_var)
         test_loss = test_loss.mean()
 
     if params["loss_choice"] == "MSE":
@@ -311,8 +295,7 @@ def train_network(params):
         target_var = T.dmatrix('targets')
 
         print("Building model and compiling functions...")
-        if params["model"] == 'mlp':
-            network = build_mlp(params, input_var)
+        network = build_mlp(params, input_var)
 
         output_var = lasagne.layers.get_output(network)
 
@@ -340,15 +323,10 @@ def train_network(params):
 
     # DEBUG
     params["get_output"](X_train[[0]])
-#    import pdb; pdb.set_trace()
+
     # Create an expression for the classification accuracy:
-    if params["n_output_units"] == 2:
-        prediction_var = T.round(output_var)
-    else:
-        prediction_var = T.shape_padaxis(T.argmax(output_var, axis=1), 1)
-
+    prediction_var = T.shape_padaxis(T.argmax(output_var, axis=1), 1)
     params["prediction_func"] = theano.function([input_var], prediction_var, allow_input_downcast=True)
-
 
     # Compile a function performing a training step on a mini-batch (by giving
     # the updates dictionary) and returning the corresponding training loss:
@@ -356,17 +334,9 @@ def train_network(params):
 
     # Compile a second function computing the validation loss and accuracy:
     def val_fn(X, y):
-        y_hat = params["prediction_func"](X)
-
-        # transform prediction from one-hot into scalar int if necessary
-        # remember that both the prediction y_hat and the targets y 
-        # are in one hot encoding
-        if y_hat.shape[1] > 1:
-            y_hat = np.argmax(y_hat, axis=1)
-            y = np.argmax(y, axis=1)
-
+        y_hat = params["prediction_func"](X).squeeze()
+        y = np.argmax(y, axis=1)
         return np.sum(y_hat == y) / y.shape[0]
-
 
     ############################################################################
     # TRAINING LOOP
@@ -401,8 +371,6 @@ def train_network(params):
                 print("Epoch {} of {} took {:.3f}s".format(
                     epoch + 1, params["epochs"], time.time() - start_time))
                 print("  training loss:\t\t{:.6f}".format(train_err / train_batches))
-
-
                 print("  validation accuracy:\t\t{:.2f} %".format(
                     val_acc / val_batches * 100))
 
@@ -517,7 +485,6 @@ def compute_relevance(func_input, network, output_neuron, params, epsilon = .01)
     return R
 
 
-
 def compute_accuracy(y, y_hat):
     """ Compute the percentage of correct classifications """
     if y.shape == y_hat.shape:
@@ -528,17 +495,16 @@ def compute_accuracy(y, y_hat):
         raise("The two inputs didn't have the same shape")
 
 
-
 def get_W_from_gradients(X, params):
     """
-    Returns W of shape [n_features, n_output_units]
+    Returns W of shape [n_features, n_classes]
     In other words, W contains the gradients in the columns
     (and there are as many gradients as there are output units)
     """
 
     # input shape handling
     input_shape = params["input_shape"]
-    # the shape of output_var is [1, n_output_units]
+    # the shape of output_var is [1, n_classes]
     if len(params["input_shape"]) == 1:
         n_features = input_shape[0]
     elif len(input_shape) == 2:
@@ -547,15 +513,13 @@ def get_W_from_gradients(X, params):
     else:
         raise("Unexpected input shape")
 
-    W = np.empty((n_features, params["n_output_units"]))
-    for output_idx in range(params["n_output_units"]):
+    W = np.empty((n_features, params["n_classes"]))
+    for output_idx in range(params["n_classes"]):
         gradient_var = T.grad(params["output_var"][0, output_idx], params["input_var"])
         compute_grad = theano.function([params["input_var"]], gradient_var, allow_input_downcast=True)
         gradient = compute_grad(X)
         W[:, output_idx] = gradient.flatten()
     return W
-
-
 
 
 def plot_background():
@@ -586,7 +550,7 @@ def plot_background():
 
 def plot_w_or_patterns(what_to_plot):
     # create a mesh to plot in
-    h = .5 # step size in the mesh
+    h = .8 # step size in the mesh
     x_min, x_max = -2, 2 + h
     y_min, y_max = -2, 2 + h
     xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
@@ -630,8 +594,6 @@ params["model"] = "custom"
 params["input_dim"] = 2
 params["input_shape"] = (2,)
 params["n_classes"] = 2
-params["n_output_units"] = 2
-networks.build_custom_ringpredictor(params)
 network, params = train_network(params)
 OUTPUT_NEURON_SELECTED = 1
 VECTOR_ADJUST_CONSTANT = 3

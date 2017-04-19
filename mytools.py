@@ -28,8 +28,8 @@ def get_CLI_parameters(argv):
 
     params = vars(parser.parse_args(argv[1:]))
     params["N_train"] = 5000
-    params["N_val"] = 200
-    params["N_test"] = 200
+    params["N_val"] = 300
+    params["N_test"] = 300
     params["minibatch_size"] = 30
     params["input_dim"] = 100
     params["input_shape"] = [10, 10]
