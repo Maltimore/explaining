@@ -193,16 +193,13 @@ def create_ring_data(params, N):
 
 
 def build_mlp(params, input_var=None):
-    if params["bias_in_data"]:
-        bias = None
-    else:
-        bias = lasagne.init.Constant(0.)
-
     # Input layer
     if params["bias_in_data"]:
+        bias = None
         current_layer = lasagne.layers.InputLayer(shape=(None, params["input_dim"]+1),
                                         input_var=input_var, b=bias)
     else:
+        bias = lasagne.init.Constant(0.)
         current_layer = lasagne.layers.InputLayer(shape=(None, params["input_dim"]),
                                         input_var=input_var, b=bias)
     # Hidden layers
@@ -216,9 +213,9 @@ def build_mlp(params, input_var=None):
             W=lasagne.init.GlorotUniform(),
             b=bias)
 
-        l_out = lasagne.layers.DenseLayer(
-                current_layer, num_units=params["n_classes"],
-                nonlinearity=lasagne.nonlinearities.softmax)
+    l_out = lasagne.layers.DenseLayer(
+            current_layer, num_units=params["n_output_units"],
+            nonlinearity=lasagne.nonlinearities.softmax)
     return l_out
 
 
