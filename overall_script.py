@@ -18,7 +18,7 @@ na = np.newaxis
 # imports from this project
 import mytools
 import networks
-importlib.reload(mytools)
+
 if __name__ == "__main__" and "-f" not in sys.argv:
     params = mytools.get_CLI_parameters(sys.argv)
 else:
@@ -550,7 +550,7 @@ def plot_background():
 
 def plot_w_or_patterns(what_to_plot):
     # create a mesh to plot in
-    h = .8 # step size in the mesh
+    h = .4 # step size in the mesh
     x_min, x_max = -2, 2 + h
     y_min, y_max = -2, 2 + h
     xx, yy = np.meshgrid(np.arange(x_min, x_max, h),

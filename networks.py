@@ -22,9 +22,5 @@ def build_custom_ringpredictor(params, input_var=None):
                                 W=precomputed_W)
     # layer that figures
     current_layer = lasagne.layers.FeaturePoolLayer(current_layer, pool_size=4)
-    l_out = lasagne.layers.DenseLayer(
-            current_layer,
-            num_units=2,
-            nonlinearity=lasagne.nonlinearities.softmax)
-#    l_out = lasagne.layers.FeatureWTALayer(current_layer, pool_size=1)
+    l_out = lasagne.layers.FeatureWTALayer(current_layer, pool_size=2)
     return l_out
