@@ -444,6 +444,9 @@ def get_W_from_gradients(X, params):
 def plot_background():
     # create some data for scatterplot
     X, y = create_ring_data(params, params["N_train"])
+    permutation = np.random.permutation(X.shape[0])
+    X = X[permutation]
+    y = y[permutation]
     # create a mesh to plot in
     h = .01 # step size in the mesh
     x_min, x_max = -2, 2
@@ -460,7 +463,22 @@ def plot_background():
     # Put the result into a color plot
     Z = Z.reshape(xx.shape)
 
-    #plt.scatter(X[:,0], X[:,1], c=y, cmap="gray", s=40)
+    # ATTENTION
+    # due to annoying matplotlib behavior (matplotlib plots lines despite
+    # marker="o"), we have to loop here.
+    class_1_mask = (y == 0).squeeze()
+    class_2_mask = (y == 1).squeeze()
+    for idx in range(500):
+        plt.plot(X[class_1_mask, 0][idx], X[class_1_mask,1][idx], #markerfacecolor=y[:500],
+                color="white",
+                marker="o",
+                fillstyle="full",
+                markeredgecolor="black")
+        plt.plot(X[class_2_mask, 0][idx], X[class_2_mask,1][idx], #markerfacecolor=y[:500],
+                color="black",
+                marker="o",
+                fillstyle="full",
+                markeredgecolor="black")
     plt.imshow(Z, interpolation="nearest", cmap=cm.gray, alpha=0.4,
                extent=[x_min, x_max, y_min, y_max])
     plt.xlim(xx.min(), xx.max())
@@ -469,7 +487,7 @@ def plot_background():
 
 def plot_w_or_patterns(what_to_plot):
     # create a mesh to plot in
-    h = .5 # step size in the mesh
+    h = .8  # step size in the mesh
     x_min, x_max = -2, 2 + h
     y_min, y_max = -2, 2 + h
     xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
@@ -481,10 +499,10 @@ def plot_w_or_patterns(what_to_plot):
     y = one_hot_encoding(y_train, params["n_classes"])
     Sigma_s = np.cov(y, rowvar=False)
 
-    #Sigma_s_inv = np.linalg.inv(np.cov(y.T))
+    # Sigma_s_inv = np.linalg.inv(np.cov(y.T))
     Sigma_X = np.cov(X_train, rowvar=False)
     for idx in range(len(mesh)):
-        if idx%100 == 0:
+        if idx % 100 == 0:
             print("Computing weight vector nr " + str(idx) + " out of " + str(len(mesh)))
         X_pos = mesh[idx][na, :]
         W = get_W_from_gradients(X_pos, params)
@@ -503,12 +521,11 @@ def plot_w_or_patterns(what_to_plot):
         plt.quiver(X_pos[0, 0], X_pos[0, 1], plot_vector[0], plot_vector[1], scale=None)
 
 
-
 # RING DATA
 # train MLP on ring data
 params["layer_sizes"] = [20, 20]
 params["data"] = "ring"
-params["model"] = "custom"
+params["model"] = "mlp"
 params["input_dim"] = 2
 params["input_shape"] = (2,)
 params["n_classes"] = 2
@@ -516,21 +533,18 @@ network, params = train_network(params)
 OUTPUT_NEURON_SELECTED = 1
 VECTOR_ADJUST_CONSTANT = 3
 
-
-
-
 # GRADIENTS
 plt.figure()
-plot_w_or_patterns(what_to_plot="gradients")
 # plot background
 plot_background()
+plot_w_or_patterns(what_to_plot="gradients")
 plt.title("gradients")
 
 # PATTERNS
 plt.figure()
-plot_w_or_patterns(what_to_plot="patterns")
 # plot background
 plot_background()
+plot_w_or_patterns(what_to_plot="patterns")
 plt.title("patterns")
 
 
