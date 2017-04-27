@@ -184,53 +184,6 @@ def create_ring_data(params, N):
     return X[:N], y[:N]
 
 
-def build_mlp(params, input_var=None):
-    current_layer = lasagne.layers.InputLayer(shape=(None, params["input_dim"]),
-                                    input_var=input_var)
-    # Hidden layers
-    for layer_size in params["layer_sizes"]:
-        if layer_size == 0:
-            print("Zero layer requested, ignoring...")
-            continue
-        current_layer = lasagne.layers.DenseLayer(
-            current_layer, num_units=layer_size,
-            nonlinearity=lasagne.nonlinearities.rectify,
-            W=lasagne.init.GlorotUniform())
-
-    l_out = lasagne.layers.DenseLayer(
-            current_layer, num_units=params["n_output_units"],
-            nonlinearity=lasagne.nonlinearities.softmax)
-    return l_out
-
-
-def build_cnn(params, input_var):
-    # Input layer
-    current_layer = lasagne.layers.InputLayer(shape=(None,
-                                                     1,
-                                                     params["input_shape"][0],
-                                                     params["input_shape"][1]),
-                                            input_var=input_var)
-    # Hidden layers
-    n_filters = 15
-    current_layer = lasagne.layers.Conv2DLayer(current_layer,
-                        num_filters=n_filters,
-                        filter_size=(3, 3),
-                        pad="same",
-                        nonlinearity=lasagne.nonlinearities.rectify)
-    n_filters = 4
-    current_layer = lasagne.layers.Conv2DLayer(current_layer,
-                        num_filters=n_filters,
-                        filter_size=(3, 3),
-                        pad="same",
-                        nonlinearity=lasagne.nonlinearities.rectify)
-
-    # Output layer
-    l_out = lasagne.layers.DenseLayer(
-            current_layer, num_units=params["n_classes"],
-            nonlinearity=lasagne.nonlinearities.softmax)
-    return l_out
-
-
 def iterate_minibatches(inputs, targets, batchsize, shuffle=False):
     """
     this function makes no assumption about the shape of inputs and 
@@ -255,78 +208,47 @@ def train_network(params):
     y_val = transform_target(y_val, params)
     y_test = transform_target(y_test, params)
 
-    if params["loss_choice"] == "categorical_crossentropy":
-        print("Building model and compiling functions...")
-        input_var = T.tensor4('inputs')
-        target_var = T.matrix('targets')
-        if params["model"] == 'mlp':
-            network = build_mlp(params, input_var)
-        elif params["model"] == "cnn":
-            network = build_cnn(params, input_var)
-        elif params["model"] == "custom":
-            input_var = T.matrix('mlp_inputs')
-            target_var = T.matrix('targets')
-            network = networks.build_custom_ringpredictor(params, input_var)
-
-        output_var = lasagne.layers.get_output(network)
-        loss = lasagne.objectives.categorical_crossentropy(output_var, target_var)
-        loss = loss.mean()
-
-        # Create update expressions for training, i.e., how to modify the
-        # parameters at each training step. Here, we'll use Stochastic Gradient
-        # Descent (SGD) with Nesterov momentum, but Lasagne offers plenty more.
-        network_params = lasagne.layers.get_all_params(network, trainable=True)
-        updates = lasagne.updates.nesterov_momentum(
-                loss, network_params, learning_rate=0.02, momentum=0.9)
-
-        # Create a loss expression for validation/testing. The crucial difference
-        # here is that we do a deterministic forward pass through the network,
-        # disabling dropout layers.
-        test_loss = lasagne.objectives.categorical_crossentropy(output_var, target_var)
-        test_loss = test_loss.mean()
-
-    if params["loss_choice"] == "MSE":
-        # Prepare Theano variables for inputs and targets
+    print("Building model and compiling functions...")
+    input_var = T.tensor4('inputs')
+    target_var = T.matrix('targets')
+    if params["model"] == 'mlp':
+        network = networks.build_mlp(params, input_var)
+    elif params["model"] == "cnn":
+        network = networks.build_cnn(params, input_var)
+    elif params["model"] == "custom":
         input_var = T.matrix('inputs')
-        target_var = T.dmatrix('targets')
+        network = networks.build_custom_ringpredictor(params, input_var)
+    output_var = lasagne.layers.get_output(network)
 
-        print("Building model and compiling functions...")
-        network = build_mlp(params, input_var)
-
-        output_var = lasagne.layers.get_output(network)
-
+    if params["loss_choice"] == "categorical_crossentropy":
+        loss = lasagne.objectives.categorical_crossentropy(output_var, target_var)
+        test_loss = lasagne.objectives.categorical_crossentropy(output_var, target_var)
+    elif params["loss_choice"] == "MSE":
         loss = lasagne.objectives.squared_error(output_var, target_var)
-        loss = loss.mean()
-
-        # Create update expressions for training, i.e., how to modify the
-        # parameters at each training step. Here, we'll use Stochastic Gradient
-        # Descent (SGD) with Nesterov momentum, but Lasagne offers plenty more.
-        network_params = lasagne.layers.get_all_params(network, trainable=True)
-        updates = lasagne.updates.nesterov_momentum(
-                loss, network_params, learning_rate=0.01, momentum=0.9)
-
-        # Create a loss expression for validation/testing. The crucial difference
-        # here is that we do a deterministic forward pass through the network,
-        # disabling dropout layers.
         test_loss = lasagne.objectives.squared_error(output_var, target_var)
-        test_loss = test_loss.mean()
+
+    loss = loss.mean()
+    test_loss = test_loss.mean()
+    network_params = lasagne.layers.get_all_params(network, trainable=True)
+    updates = lasagne.updates.nesterov_momentum(
+            loss, network_params, learning_rate=params["lr"], momentum=0.9)
 
     # save some useful variables and functions into the params dict
     params["input_var"] = input_var
     params["target_var"] = target_var
     params["output_var"] = output_var
-    params["get_output"] = theano.function([input_var], output_var, allow_input_downcast=True)
-
-    # DEBUG
-    params["get_output"](X_train[[0]])
+    params["get_output"] = theano.function([input_var],
+            output_var, allow_input_downcast=True)
 
     # Create an expression for the classification accuracy:
     prediction_var = T.shape_padaxis(T.argmax(output_var, axis=1), 1)
-    params["prediction_func"] = theano.function([input_var], prediction_var, allow_input_downcast=True)
+    params["prediction_func"] = theano.function([input_var], 
+                        prediction_var, allow_input_downcast=True)
 
     # Compile a function performing a training step on a mini-batch (by giving
     # the updates dictionary) and returning the corresponding training loss:
-#    train_fn = theano.function([input_var, target_var], loss, updates=updates, allow_input_downcast=True)
+    train_fn = theano.function([input_var, target_var],
+                               loss, updates=updates, allow_input_downcast=True)
 
     # Compile a second function computing the validation loss and accuracy:
     def val_fn(X, y):

@@ -35,6 +35,7 @@ def get_CLI_parameters(argv):
     params["input_shape"] = [10, 10]
     params["horseshoe_distractors"] = True
     params["specific_dataclass"] = None
+    params["lr"] = 0 # learning rate
 
     # extract layer sizes from input string
     layer_list = []

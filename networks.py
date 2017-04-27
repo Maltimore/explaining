@@ -24,3 +24,51 @@ def build_custom_ringpredictor(params, input_var=None):
     current_layer = lasagne.layers.FeaturePoolLayer(current_layer, pool_size=4)
     l_out = lasagne.layers.FeatureWTALayer(current_layer, pool_size=2)
     return l_out
+
+
+def build_mlp(params, input_var=None):
+    current_layer = lasagne.layers.InputLayer(shape=(None, params["input_dim"]),
+                                    input_var=input_var)
+    # Hidden layers
+    for layer_size in params["layer_sizes"]:
+        if layer_size == 0:
+            print("Zero layer requested, ignoring...")
+            continue
+        current_layer = lasagne.layers.DenseLayer(
+            current_layer, num_units=layer_size,
+            nonlinearity=lasagne.nonlinearities.rectify,
+            W=lasagne.init.GlorotUniform())
+
+    l_out = lasagne.layers.DenseLayer(
+            current_layer, num_units=params["n_output_units"],
+            nonlinearity=lasagne.nonlinearities.softmax)
+    return l_out
+
+
+def build_cnn(params, input_var):
+    # Input layer
+    current_layer = lasagne.layers.InputLayer(shape=(None,
+                                                     1,
+                                                     params["input_shape"][0],
+                                                     params["input_shape"][1]),
+                                            input_var=input_var)
+    # Hidden layers
+    n_filters = 15
+    current_layer = lasagne.layers.Conv2DLayer(current_layer,
+                        num_filters=n_filters,
+                        filter_size=(3, 3),
+                        pad="same",
+                        nonlinearity=lasagne.nonlinearities.rectify)
+    n_filters = 4
+    current_layer = lasagne.layers.Conv2DLayer(current_layer,
+                        num_filters=n_filters,
+                        filter_size=(3, 3),
+                        pad="same",
+                        nonlinearity=lasagne.nonlinearities.rectify)
+
+    # Output layer
+    l_out = lasagne.layers.DenseLayer(
+            current_layer, num_units=params["n_classes"],
+            nonlinearity=lasagne.nonlinearities.softmax)
+    return l_out
+
