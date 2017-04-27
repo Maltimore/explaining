@@ -14,14 +14,13 @@ def get_CLI_parameters(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument("-l", "--loss_choice", default="categorical_crossentropy")
     parser.add_argument("--noise_scale", default=0.4, type=float)
-    parser.add_argument("-e", "--epochs", default=50, type=int)
+    parser.add_argument("-e", "--epochs", default=0, type=int)
     parser.add_argument("-m", "--model", default="cnn")
-    parser.add_argument("--layer_sizes", default="20, 20")
+    parser.add_argument("--layer_sizes", default="8")
     parser.add_argument("-p", "--do_plotting", default=True)
     parser.add_argument("--verbose", default=True)
     parser.add_argument("-d", "--data", default="horseshoe")
-    parser.add_argument("-c", "--n_classes", default="4", type=int)
-    parser.add_argument("--n_output_units", default="1", type=int)
+    parser.add_argument("-c", "--n_classes", default="2", type=int)
     parser.add_argument("-b", "--bias_in_data", default=False)
     parser.add_argument("-r", "--remote", default=False)
     parser.add_argument("-n", "--name", default="default")
@@ -35,7 +34,7 @@ def get_CLI_parameters(argv):
     params["input_shape"] = [10, 10]
     params["horseshoe_distractors"] = True
     params["specific_dataclass"] = None
-    params["lr"] = 0 # learning rate
+    params["lr"] = 0.01 # learning rate
 
     # extract layer sizes from input string
     layer_list = []

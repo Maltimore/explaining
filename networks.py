@@ -40,7 +40,7 @@ def build_mlp(params, input_var=None):
             W=lasagne.init.GlorotUniform())
 
     l_out = lasagne.layers.DenseLayer(
-            current_layer, num_units=params["n_output_units"],
+            current_layer, num_units=params["n_classes"],
             nonlinearity=lasagne.nonlinearities.softmax)
     return l_out
 

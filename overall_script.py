@@ -209,7 +209,7 @@ def train_network(params):
     y_test = transform_target(y_test, params)
 
     print("Building model and compiling functions...")
-    input_var = T.tensor4('inputs')
+    input_var = T.matrix('inputs')
     target_var = T.matrix('targets')
     if params["model"] == 'mlp':
         network = networks.build_mlp(params, input_var)
@@ -227,8 +227,10 @@ def train_network(params):
         loss = lasagne.objectives.squared_error(output_var, target_var)
         test_loss = lasagne.objectives.squared_error(output_var, target_var)
 
+    # average loss expressions
     loss = loss.mean()
     test_loss = test_loss.mean()
+
     network_params = lasagne.layers.get_all_params(network, trainable=True)
     updates = lasagne.updates.nesterov_momentum(
             loss, network_params, learning_rate=params["lr"], momentum=0.9)
@@ -256,7 +258,6 @@ def train_network(params):
         y = np.argmax(y, axis=1)
         return np.sum(y_hat == y) / y.shape[0]
 
-    ############################################################################
     # TRAINING LOOP
     print("Starting training...")
     # We iterate over epochs:
@@ -269,7 +270,7 @@ def train_network(params):
             inputs, targets = batch
             if params["model"] == "cnn":
                 inputs = data_with_dims(inputs, params["input_shape"])
-#            train_err += train_fn(inputs, targets)
+            train_err += train_fn(inputs, targets)
             train_batches += 1
 
         # And a full pass over the validation data:
@@ -468,7 +469,7 @@ def plot_background():
 
 def plot_w_or_patterns(what_to_plot):
     # create a mesh to plot in
-    h = .4 # step size in the mesh
+    h = .5 # step size in the mesh
     x_min, x_max = -2, 2 + h
     y_min, y_max = -2, 2 + h
     xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
