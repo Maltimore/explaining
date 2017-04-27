@@ -546,7 +546,7 @@ def plot_background():
 
 def plot_w_or_patterns(what_to_plot):
     # create a mesh to plot in
-    h = .2 # step size in the mesh
+    h = .4 # step size in the mesh
     x_min, x_max = -2, 2 + h
     y_min, y_max = -2, 2 + h
     xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
@@ -559,7 +559,7 @@ def plot_w_or_patterns(what_to_plot):
     Sigma_s = np.cov(y, rowvar=False)
 
     #Sigma_s_inv = np.linalg.inv(np.cov(y.T))
-    Sigma_X = np.cov(X_train.T)
+    Sigma_X = np.cov(X_train, rowvar=False)
     for idx in range(len(mesh)):
         if idx%100 == 0:
             print("Computing weight vector nr " + str(idx) + " out of " + str(len(mesh)))
