@@ -181,6 +181,12 @@ def train_network(params):
     y_val = one_hot_encoding(y_val, params["n_classes"])
     y_test = one_hot_encoding(y_test, params["n_classes"])
 
+    # if we're training the CNN, we need extra dimensions
+    if params["model"] == "cnn":
+        X_train = X_train.reshape(params["network_input_shape"])
+        X_val = X_val.reshape(params["network_input_shape"])
+        X_test = X_test.reshape(params["network_input_shape"])
+
     print("Building model and compiling functions...")
     input_var = T.matrix('inputs')
     target_var = T.matrix('targets')
@@ -217,7 +223,7 @@ def train_network(params):
 
     # Create an expression for the classification accuracy:
     prediction_var = T.shape_padaxis(T.argmax(output_var, axis=1), 1)
-    params["prediction_func"] = theano.function([input_var], 
+    params["prediction_func"] = theano.function([input_var],
                         prediction_var, allow_input_downcast=True)
 
     # Compile a function performing a training step on a mini-batch (by giving
@@ -239,21 +245,17 @@ def train_network(params):
         train_err = 0
         train_batches = 0
         start_time = time.time()
-        for batch in iterate_minibatches(X_train, y_train, params["minibatch_size"], shuffle=True):
+        for batch in iterate_minibatches(X_train, y_train, params["minibatch_size"]):
             inputs, targets = batch
-            if params["model"] == "cnn":
-                inputs = inputs.reshape(params["network_input_shape"])
             train_err += train_fn(inputs, targets)
             train_batches += 1
 
         # And a full pass over the validation data:
-        if epoch%10 == 0:
+        if epoch % 10 == 0:
             val_acc = 0
             val_batches = 0
-            for batch in iterate_minibatches(X_val, y_val, params["minibatch_size"], shuffle=False):
+            for batch in iterate_minibatches(X_val, y_val, params["minibatch_size"]):
                 inputs, targets = batch
-                if params["model"] == "cnn":
-                    inputs = inputs.reshape(params["network_input_shape"])
                 acc = val_fn(inputs, targets)
                 val_acc += acc
                 val_batches += 1
@@ -271,8 +273,6 @@ def train_network(params):
     test_batches = 0
     for batch in iterate_minibatches(X_test, y_test, params["minibatch_size"], shuffle=False):
         inputs, targets = batch
-        if params["model"] == "cnn":
-            inputs = inputs.reshape(params["network_input_shape"])
         acc = val_fn(inputs, targets)
         test_acc += acc
         test_batches += 1
