@@ -222,10 +222,14 @@ def train_network(params):
     params["prediction_func"] = theano.function([input_var],
                         prediction_var, allow_input_downcast=True)
 
+    if params["model"] == "custom":
+        return network, params
+
     # Compile a function performing a training step on a mini-batch (by giving
     # the updates dictionary) and returning the corresponding training loss:
     train_fn = theano.function([input_var, target_var],
                                loss, updates=updates, allow_input_downcast=True)
+
 
     # TRAINING LOOP
     print("Starting training...")
