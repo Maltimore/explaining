@@ -154,7 +154,7 @@ def create_ring_data(params, N):
     if params["bias_in_data"]:
         onesvec = np.atleast_2d(np.ones((X.shape[0]))).T
         X = np.hstack((X, onesvec))
-    return X[:N], y[:N]
+    return X[:N], y[:N].squeeze()
 
 
 def iterate_minibatches(inputs, targets, batchsize, shuffle=True):
@@ -176,10 +176,6 @@ def train_network(params):
     X_train, y_train = create_data(params, params["N_train"])
     X_val, y_val = create_data(params, params["N_val"])
     X_test, y_test = create_data(params, params["N_test"])
-    # one hot encoding of target
-    y_train = one_hot_encoding(y_train, params["n_classes"])
-    y_val = one_hot_encoding(y_val, params["n_classes"])
-    y_test = one_hot_encoding(y_test, params["n_classes"])
 
     # if we're training the CNN, we need extra dimensions
     if params["model"] == "cnn":
@@ -222,7 +218,7 @@ def train_network(params):
             output_var, allow_input_downcast=True)
 
     # Create an expression for the classification accuracy:
-    prediction_var = T.shape_padaxis(T.argmax(output_var, axis=1), 1)
+    prediction_var = T.argmax(output_var, axis=1)
     params["prediction_func"] = theano.function([input_var],
                         prediction_var, allow_input_downcast=True)
 
@@ -247,7 +243,7 @@ def train_network(params):
         start_time = time.time()
         for batch in iterate_minibatches(X_train, y_train, params["minibatch_size"]):
             inputs, targets = batch
-            train_err += train_fn(inputs, targets)
+            train_err += train_fn(inputs, one_hot_encoding(targets, params["n_classes"]))
             train_batches += 1
 
         # And a full pass over the validation data:
@@ -255,11 +251,10 @@ def train_network(params):
             val_acc = 0
             val_batches = 0
             for batch in iterate_minibatches(X_val, y_val, params["minibatch_size"]):
-                inputs, targets = batch
-                acc = val_fn(inputs, targets)
-                val_acc += acc
+                X_val_batch, y_val_batch = batch
+                y_val_hat = params["prediction_func"](X_val_batch)
+                val_acc += compute_accuracy(y_val_batch, y_val_hat)
                 val_batches += 1
-
             if params["verbose"]:
                 # Then we print the results for this epoch:
                 print("Epoch {} of {} took {:.3f}s".format(
@@ -272,9 +267,9 @@ def train_network(params):
     test_acc = 0
     test_batches = 0
     for batch in iterate_minibatches(X_test, y_test, params["minibatch_size"], shuffle=False):
-        inputs, targets = batch
-        acc = val_fn(inputs, targets)
-        test_acc += acc
+        X_test_batch, y_test_batch = batch
+        y_test_hat = params["prediction_func"](X_test_batch)
+        test_acc += compute_accuracy(y_test_batch, y_test_hat)
         test_batches += 1
     print("Final results:")
     print("  test accuracy:\t\t{:.2f} %".format(
@@ -376,13 +371,20 @@ def LRP(func_input, network, output_neuron, params, epsilon = .01):
 
 
 def compute_accuracy(y, y_hat):
-    """ Compute the percentage of correct classifications """
-    if y.shape == y_hat.shape:
-        n_correct = np.sum(y == y_hat)
-        p_correct = n_correct / y.size
-        return p_correct
-    else:
-        raise("The two inputs didn't have the same shape")
+    """compute_accuracy
+    Compute the percentage of correct classifications
+
+    :param y: array, shape (n_samples,)
+    :param y_hat: array, shape (n_samples,)
+    """
+    if not len(y.shape) == 1 or not len(y_hat.shape) == 1:
+        raise ValueError("Both inputs need to have shape (n_samples,)")
+    if not y.shape == y_hat.shape:
+        raise ValueError("The two inputs didn't have the same shape")
+
+    n_correct = np.sum(y == y_hat)
+    p_correct = n_correct / y.size
+    return p_correct
 
 
 def get_W_from_gradients(X, params):
