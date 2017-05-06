@@ -28,9 +28,8 @@ def get_CLI_parameters(argv):
     params["N_val"] = 300
     params["N_test"] = 300
     params["minibatch_size"] = 30
-    params["input_dim"] = 100
-    params["input_shape"] = [10, 10]
     params["horseshoe_distractors"] = True
+    params["network_input_shape"] = (-1, 2)
     params["specific_dataclass"] = None
     params["lr"] = 0.01 # learning rate
 

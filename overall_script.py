@@ -138,11 +138,11 @@ def create_ring_data(params, N):
     """
     n_centers = 8
     n_per_center = int(np.ceil(N / n_centers))
-    C = .02*np.eye(params["input_dim"])
+    C = .02*np.eye(2)
     radius = 1
     class_means = radius*np.array([[np.cos(i*2.*np.pi/n_centers),np.sin(i*2.*np.pi/n_centers)] for i in range(n_centers)])
 
-    X = np.empty((n_centers * n_per_center, params["input_dim"]))
+    X = np.empty((n_centers * n_per_center, 2))
     y = np.empty((n_centers * n_per_center, 1), dtype=np.int32)
     idx = 0
     while idx < n_centers:
@@ -214,7 +214,7 @@ def train_network(params):
     params["input_var"] = input_var
     params["target_var"] = target_var
     params["output_var"] = output_var
-    params["get_output"] = theano.function([input_var],
+    params["get_output_func"] = theano.function([input_var],
             output_var, allow_input_downcast=True)
 
     # Create an expression for the classification accuracy:
@@ -381,25 +381,26 @@ def compute_accuracy(y, y_hat):
     return p_correct
 
 
-def get_W_from_gradients(X, params):
-    """get_W_from_gradients
+def get_gradients(X, params):
+    """get_gradients
 
-    :param X: array, shape [1, feature_dim1, ...]
+
+    :param X: array, shape (1,) + network_input_shape[1:]
          X should be a single input sample in the shape that
          gets accepted by the network
     :param params: parameter dict
 
-    :returns: W of shape [n_features, n_classes]
-         W contains the gradients in the columns
+    :returns: array of shape X.shape + (n_classes,)
+         gradients contains the gradients in the columns
          (and there are as many gradients as there are output units)
     """
 
-    W = np.empty(X.shape[1:] + (params["n_classes"],))
+    W = np.empty(X.shape + (params["n_classes"],))
     for output_idx in range(params["n_classes"]):
         gradient_var = T.grad(params["output_var"][0, output_idx], params["input_var"])
         compute_grad = theano.function([params["input_var"]], gradient_var, allow_input_downcast=True)
         gradient = compute_grad(X)
-        W[:, output_idx] = gradient.flatten()
+        W[:, output_idx] = gradient
     return W
 
 
@@ -420,9 +421,7 @@ def plot_background():
                          np.arange(y_min, y_max, h))
     mesh = np.c_[xx.ravel(), yy.ravel()]
 
-    output = lasagne.layers.get_output(network)
-    get_output = theano.function([params["input_var"]], output, allow_input_downcast=True)
-    Z = get_output(mesh)
+    Z = params["get_output_func"](mesh)
     Z = Z[:, OUTPUT_NEURON_SELECTED]
 
     # Put the result into a color plot
@@ -451,7 +450,7 @@ def plot_background():
 
 def plot_w_or_patterns(what_to_plot):
     # create a mesh to plot in
-    h = .5  # step size in the mesh
+    h = .8  # step size in the mesh
     x_min, x_max = -2, 2 + h
     y_min, y_max = -2, 2 + h
     xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
@@ -465,19 +464,22 @@ def plot_w_or_patterns(what_to_plot):
 
     # Sigma_s_inv = np.linalg.inv(np.cov(y.T))
     Sigma_X = np.cov(X_train, rowvar=False)
+    
+    # get all the gradients
+    gradients = get_gradients(mesh, params)
+
     for idx in range(len(mesh)):
         if idx % 100 == 0:
             print("Computing weight vector nr " + str(idx) + " out of " + str(len(mesh)))
-        X_pos = mesh[idx][na, :]
-        W = get_W_from_gradients(X_pos, params)
+        X_pos = mesh[[idx]]
 
         if what_to_plot == "gradients":
-            plot_vector = W[:, OUTPUT_NEURON_SELECTED]
+            plot_vector = gradients[idx, ..., OUTPUT_NEURON_SELECTED]
             plot_vector /= np.linalg.norm(plot_vector) * VECTOR_ADJUST_CONSTANT
         elif what_to_plot == "patterns":
             # compute A from the Haufe paper.
             # The columns of A are the activation patterns
-            A_haufe = np.dot(np.dot(Sigma_X, W), np.linalg.pinv(Sigma_s))
+            A_haufe = np.dot(np.dot(Sigma_X, gradients[idx]), np.linalg.pinv(Sigma_s))
             plot_vector = A_haufe[:, OUTPUT_NEURON_SELECTED]
             plot_vector /= np.linalg.norm(plot_vector) * VECTOR_ADJUST_CONSTANT
         else:
@@ -490,7 +492,6 @@ def plot_w_or_patterns(what_to_plot):
 params["layer_sizes"] = [8, 8]
 params["data"] = "ring"
 params["model"] = "mlp"
-params["input_dim"] = 2
 params["input_shape"] = (2,)
 params["network_input_shape"] = (-1, 2)
 params["n_classes"] = 2
