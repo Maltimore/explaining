@@ -390,18 +390,18 @@ def get_gradients(X, params):
          gets accepted by the network
     :param params: parameter dict
 
-    :returns: array of shape X.shape + (n_classes,)
-         gradients contains the gradients in the columns
-         (and there are as many gradients as there are output units)
+    :returns: gradients, array of shape X.shape + (n_classes,)
+         the first axis contains samples, the last axis contains the
+         class indices with regard to which the gradient is taken
     """
 
-    W = np.empty(X.shape + (params["n_classes"],))
+    gradients = np.empty(X.shape + (params["n_classes"],))
     for output_idx in range(params["n_classes"]):
         gradient_var = T.grad(params["output_var"][0, output_idx], params["input_var"])
         compute_grad = theano.function([params["input_var"]], gradient_var, allow_input_downcast=True)
-        gradient = compute_grad(X)
-        W[:, output_idx] = gradient
-    return W
+        for sample_idx in range(X.shape[0]):
+            gradients[sample_idx, ..., output_idx] = compute_grad(X[[sample_idx]])
+    return gradients
 
 
 def plot_background():
@@ -450,7 +450,7 @@ def plot_background():
 
 def plot_w_or_patterns(what_to_plot):
     # create a mesh to plot in
-    h = .8  # step size in the mesh
+    h = .2  # step size in the mesh
     x_min, x_max = -2, 2 + h
     y_min, y_max = -2, 2 + h
     xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
@@ -464,7 +464,7 @@ def plot_w_or_patterns(what_to_plot):
 
     # Sigma_s_inv = np.linalg.inv(np.cov(y.T))
     Sigma_X = np.cov(X_train, rowvar=False)
-    
+
     # get all the gradients
     gradients = get_gradients(mesh, params)
 
@@ -493,7 +493,7 @@ params["layer_sizes"] = [8, 8]
 params["data"] = "ring"
 params["model"] = "mlp"
 params["input_shape"] = (2,)
-params["network_input_shape"] = (-1, 2)
+params["network_input_shape"] = (None, 2)
 params["n_classes"] = 2
 network, params = train_network(params)
 OUTPUT_NEURON_SELECTED = 1
@@ -501,14 +501,12 @@ VECTOR_ADJUST_CONSTANT = 3
 
 # GRADIENTS
 plt.figure()
-# plot background
 plot_background()
 plot_w_or_patterns(what_to_plot="gradients")
 plt.title("gradients")
 
 # PATTERNS
 plt.figure()
-# plot background
 plot_background()
 plot_w_or_patterns(what_to_plot="patterns")
 plt.title("patterns")
