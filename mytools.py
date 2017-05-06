@@ -1,12 +1,10 @@
 import numpy as np
 import argparse
-import sys
 import os
 
 
 def softmax(x):
     return np.exp(x) / np.sum(np.exp(x))
-
 
 
 def get_CLI_parameters(argv):

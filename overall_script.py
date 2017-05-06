@@ -22,28 +22,12 @@ else:
 
 
 def one_hot_encoding(target, n_classes):
-    if target.shape[1] > 1:
-        return target
+    if len(target.shape) > 1:
+        if target.shape[1] > 1:
+            raise ValueError("target should be of shape [n_samples, 1]")
     target = target.flatten()
-    target_mat = np.eye(n_classes)[target]
-    return target_mat
-
-
-def one_minus_one_encoding(target, n_classes):
-    target = target.squeeze()
-    target_vec = np.ones((len(target), n_classes)) * (-1)
-    target_vec[range(len(target)), target] = 1
-    return target_vec
-
-
-def transform_target(target, params):
-    """ Transforms the target from an int value to other target choices
-        like one-hot
-    """
-    if params["loss_choice"] == "categorical_crossentropy":
-        return one_hot_encoding(target, params["n_classes"])
-    elif params["loss_choice"] == "MSE":
-        return one_minus_one_encoding(target,params["n_classes"])
+    encoding = np.eye(n_classes)[target]
+    return encoding
 
 
 def data_with_dims(X, input_shape):
@@ -184,7 +168,7 @@ def create_ring_data(params, N):
     return X[:N], y[:N]
 
 
-def iterate_minibatches(inputs, targets, batchsize, shuffle=False):
+def iterate_minibatches(inputs, targets, batchsize, shuffle=True):
     """
     this function makes no assumption about the shape of inputs and 
     targets. It just assumes that they have the same length.
@@ -200,13 +184,13 @@ def iterate_minibatches(inputs, targets, batchsize, shuffle=False):
 
 def train_network(params):
     params = copy.deepcopy(params)
-    X_train, y_train= create_data(params, params["N_train"])
-    X_val, y_val= create_data(params, params["N_val"])
-    X_test, y_test= create_data(params, params["N_test"])
+    X_train, y_train = create_data(params, params["N_train"])
+    X_val, y_val = create_data(params, params["N_val"])
+    X_test, y_test = create_data(params, params["N_test"])
     # one hot encoding of target
-    y_train = transform_target(y_train, params)
-    y_val = transform_target(y_val, params)
-    y_test = transform_target(y_test, params)
+    y_train = one_hot_encoding(y_train, params["n_classes"])
+    y_val = one_hot_encoding(y_val, params["n_classes"])
+    y_test = one_hot_encoding(y_test, params["n_classes"])
 
     print("Building model and compiling functions...")
     input_var = T.matrix('inputs')
@@ -298,7 +282,6 @@ def train_network(params):
     test_batches = 0
     for batch in iterate_minibatches(X_test, y_test, params["minibatch_size"], shuffle=False):
         inputs, targets = batch
-        targets = one_hot_encoding(targets, params["n_classes"])
         if params["model"] == "cnn":
             inputs = data_with_dims(inputs, params["input_shape"])
         acc = val_fn(inputs, targets)
@@ -360,7 +343,6 @@ def forward_pass(func_input, network, input_var, params):
     return activations
 
 
-
 def get_network_parameters(network, bias_in_data):
     # --- get paramters and activations for the input ---
     all_params = lasagne.layers.get_all_param_values(network)
@@ -381,7 +363,17 @@ def get_network_parameters(network, bias_in_data):
         return W_mats, biases
 
 
-def compute_relevance(func_input, network, output_neuron, params, epsilon = .01):
+def LRP(func_input, network, output_neuron, params, epsilon = .01):
+    """LRP
+    layerwise relevance propagation
+
+    :param func_input:
+    :param network:
+    :param output_neuron:
+    :param params:
+    :param epsilon:
+    """
+
     W_mats, biases = get_network_parameters(network, params["bias_in_data"])
     activations = forward_pass(func_input, network, params["input_var"], params)
 
@@ -394,13 +386,12 @@ def compute_relevance(func_input, network, output_neuron, params, epsilon = .01)
     # --- relevance backpropagation ---
     # the first backpass is special so it can't be in the loop
     R_over_z = activations[-1][output_neuron] / (preactivations[-1][output_neuron] + epsilon)
-    R = np.multiply(W_mats[-1][output_neuron,:].T, activations[-2].T) * R_over_z
+    R = np.multiply(W_mats[-1][output_neuron, :].T, activations[-2].T) * R_over_z
     for idx in np.arange(2, len(activations)):
         R_over_z = np.divide(R, preactivations[-idx].squeeze() + epsilon)
         Z_ij = np.multiply(W_mats[-idx], activations[-idx-1].T + epsilon)
         R = np.sum(np.multiply(Z_ij.T, R_over_z), axis=1)
-    R = R.reshape((10, 10))
-
+    R = R.reshape((func_input.shape))
     return R
 
 
@@ -415,10 +406,16 @@ def compute_accuracy(y, y_hat):
 
 
 def get_W_from_gradients(X, params):
-    """
-    Returns W of shape [n_features, n_classes]
-    In other words, W contains the gradients in the columns
-    (and there are as many gradients as there are output units)
+    """get_W_from_gradients
+
+    :param X: array, shape [1, feature_dim1, ...]
+         X should be a single input sample in the shape that
+         gets accepted by the network
+    :param params: parameter dict
+
+    :returns: W of shape [n_features, n_classes]
+         W contains the gradients in the columns
+         (and there are as many gradients as there are output units)
     """
 
     # input shape handling
@@ -442,13 +439,16 @@ def get_W_from_gradients(X, params):
 
 
 def plot_background():
+    """
+    This function is for the ring data example only
+    """
     # create some data for scatterplot
     X, y = create_ring_data(params, params["N_train"])
     permutation = np.random.permutation(X.shape[0])
     X = X[permutation]
     y = y[permutation]
     # create a mesh to plot in
-    h = .01 # step size in the mesh
+    h = .01  # step size in the mesh
     x_min, x_max = -2, 2
     y_min, y_max = -2, 2
     xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
@@ -463,18 +463,17 @@ def plot_background():
     # Put the result into a color plot
     Z = Z.reshape(xx.shape)
 
-    # ATTENTION
     # due to annoying matplotlib behavior (matplotlib plots lines despite
     # marker="o"), we have to loop here.
     class_1_mask = (y == 0).squeeze()
     class_2_mask = (y == 1).squeeze()
     for idx in range(500):
-        plt.plot(X[class_1_mask, 0][idx], X[class_1_mask,1][idx], #markerfacecolor=y[:500],
+        plt.plot(X[class_1_mask, 0][idx], X[class_1_mask,1][idx],
                 color="white",
                 marker="o",
                 fillstyle="full",
                 markeredgecolor="black")
-        plt.plot(X[class_2_mask, 0][idx], X[class_2_mask,1][idx], #markerfacecolor=y[:500],
+        plt.plot(X[class_2_mask, 0][idx], X[class_2_mask,1][idx],
                 color="black",
                 marker="o",
                 fillstyle="full",
@@ -487,7 +486,7 @@ def plot_background():
 
 def plot_w_or_patterns(what_to_plot):
     # create a mesh to plot in
-    h = .8  # step size in the mesh
+    h = .5  # step size in the mesh
     x_min, x_max = -2, 2 + h
     y_min, y_max = -2, 2 + h
     xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
@@ -523,11 +522,12 @@ def plot_w_or_patterns(what_to_plot):
 
 # RING DATA
 # train MLP on ring data
-params["layer_sizes"] = [20, 20]
+params["layer_sizes"] = [8, 8]
 params["data"] = "ring"
 params["model"] = "mlp"
 params["input_dim"] = 2
 params["input_shape"] = (2,)
+params["network_input_shape"] = (-1, 2)
 params["n_classes"] = 2
 network, params = train_network(params)
 OUTPUT_NEURON_SELECTED = 1
