@@ -227,12 +227,6 @@ def train_network(params):
     train_fn = theano.function([input_var, target_var],
                                loss, updates=updates, allow_input_downcast=True)
 
-    # Compile a second function computing the validation loss and accuracy:
-    def val_fn(X, y):
-        y_hat = params["prediction_func"](X).squeeze()
-        y = np.argmax(y, axis=1)
-        return np.sum(y_hat == y) / y.shape[0]
-
     # TRAINING LOOP
     print("Starting training...")
     # We iterate over epochs:
