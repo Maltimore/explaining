@@ -418,18 +418,7 @@ def get_W_from_gradients(X, params):
          (and there are as many gradients as there are output units)
     """
 
-    # input shape handling
-    input_shape = params["input_shape"]
-    # the shape of output_var is [1, n_classes]
-    if len(params["input_shape"]) == 1:
-        n_features = input_shape[0]
-    elif len(input_shape) == 2:
-        n_features = input_shape[0] * input_shape[1]
-        X = data_with_dims(X, params["input_shape"])
-    else:
-        raise("Unexpected input shape")
-
-    W = np.empty((n_features, params["n_classes"]))
+    W = np.empty(X.shape[1:] + (params["n_classes"],))
     for output_idx in range(params["n_classes"]):
         gradient_var = T.grad(params["output_var"][0, output_idx], params["input_var"])
         compute_grad = theano.function([params["input_var"]], gradient_var, allow_input_downcast=True)
