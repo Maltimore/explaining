@@ -30,16 +30,6 @@ def one_hot_encoding(target, n_classes):
     return encoding
 
 
-def data_with_dims(X, input_shape):
-    """ Restores the dimensions of the flattened data
-        this assumes that the original data are 2-d."""
-    X = X.reshape((X.shape[0],
-                   1,
-                   input_shape[0],
-                   input_shape[1]))
-    return X
-
-
 def get_horseshoe_pattern(horseshoe_distractors):
     if horseshoe_distractors:
         A = np.empty((params["input_dim"], 8))
@@ -100,7 +90,6 @@ def get_horseshoe_pattern(horseshoe_distractors):
             current_pic[6, 3] = 0
             current_pic[5, 2] = 0
         A[:, distractor] = current_pic.flatten()
-
     return A
 
 
@@ -253,7 +242,7 @@ def train_network(params):
         for batch in iterate_minibatches(X_train, y_train, params["minibatch_size"], shuffle=True):
             inputs, targets = batch
             if params["model"] == "cnn":
-                inputs = data_with_dims(inputs, params["input_shape"])
+                inputs = inputs.reshape(params["network_input_shape"])
             train_err += train_fn(inputs, targets)
             train_batches += 1
 
@@ -264,7 +253,7 @@ def train_network(params):
             for batch in iterate_minibatches(X_val, y_val, params["minibatch_size"], shuffle=False):
                 inputs, targets = batch
                 if params["model"] == "cnn":
-                    inputs = data_with_dims(inputs, params["input_shape"])
+                    inputs = inputs.reshape(params["network_input_shape"])
                 acc = val_fn(inputs, targets)
                 val_acc += acc
                 val_batches += 1
@@ -283,7 +272,7 @@ def train_network(params):
     for batch in iterate_minibatches(X_test, y_test, params["minibatch_size"], shuffle=False):
         inputs, targets = batch
         if params["model"] == "cnn":
-            inputs = data_with_dims(inputs, params["input_shape"])
+            inputs = inputs.reshape(params["network_input_shape"])
         acc = val_fn(inputs, targets)
         test_acc += acc
         test_batches += 1
@@ -364,15 +353,6 @@ def get_network_parameters(network, bias_in_data):
 
 
 def LRP(func_input, network, output_neuron, params, epsilon = .01):
-    """LRP
-    layerwise relevance propagation
-
-    :param func_input:
-    :param network:
-    :param output_neuron:
-    :param params:
-    :param epsilon:
-    """
 
     W_mats, biases = get_network_parameters(network, params["bias_in_data"])
     activations = forward_pass(func_input, network, params["input_var"], params)
