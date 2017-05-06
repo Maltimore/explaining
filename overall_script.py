@@ -15,6 +15,8 @@ import mytools
 import networks
 theano.config.optimizer = "None"
 
+OUTPUT_NEURON_SELECTED = 0
+
 if __name__ == "__main__" and "-f" not in sys.argv:
     params = mytools.get_CLI_parameters(sys.argv)
 else:
@@ -188,6 +190,7 @@ def train_network(params):
     if params["model"] == 'mlp':
         network = networks.build_mlp(params, input_var)
     elif params["model"] == "cnn":
+        input_var = T.tensor4("inputs")
         network = networks.build_cnn(params, input_var)
     elif params["model"] == "custom":
         network = networks.build_custom_ringpredictor(params, input_var)
@@ -379,7 +382,7 @@ def compute_accuracy(y, y_hat):
 def get_gradients(X, params):
     """get_gradients
 
-    :param X: array, shape (1,) + network_input_shape[1:]
+    :param X: array, shape network_input_shape
          X should be a single input sample in the shape that
          gets accepted by the network
     :param params: parameter dict
@@ -512,55 +515,58 @@ def plot_w_or_patterns(what_to_plot):
 
 # regular mlp
 params["model"] = "mlp"
-params["layer_sizes"] = [100, 100, 10] # as requested by pieter-jan
-mlp, mlp_params = train_network(params)
+params["network_input_shape"] = (-1, 100)
+params["layer_sizes"] = [100, 10]  # as requested by pieter-jan
+mlp, mlp_params = train_network(params.copy())
 mlp_prediction_func = mlp_params["prediction_func"]
-#
-#params["model"] = "cnn"
-#cnn, cnn_params = train_network(params)
-#cnn_prediction_func = cnn_params["prediction_func"]
+
+params["model"] = "cnn"
+params["network_input_shape"] = (-1, 1, 10, 10)
+params["epochs"] = 2
+cnn, cnn_params = train_network(params.copy())
+cnn_prediction_func = cnn_params["prediction_func"]
+
+# ### compare prediction scores ###
+# some more data
+X, y = create_data(params, 500)
+
+# predict with mlp
+mlp_prediction = mlp_prediction_func(X)
+mlp_score = compute_accuracy(y, mlp_prediction)
 
 
-## ### compare prediction scores ###
-## some more data
-#X, y = create_data(params, 500)
-#
-## predict with mlp
-#mlp_prediction = mlp_prediction_func(X)
-#mlp_score = compute_accuracy(y, mlp_prediction)
-#
-#
-## predict with cnn
-#X = data_with_dims(X, cnn_params["input_shape"])
-#cnn_prediction = cnn_prediction_func(X)
-#cnn_score = compute_accuracy(y, cnn_prediction)
-#
-## manually predict
+# predict with cnn
+cnn_prediction = cnn_prediction_func(X.reshape(params["network_input_shape"]))
+cnn_score = compute_accuracy(y, cnn_prediction)
+
+# manually predict
 #man_prediction = manual_classification(X[:, 0, :, :])
 #man_score = compute_accuracy(y, man_prediction)
-#
-#
-#print("MLP score: " + str(mlp_score))
-#print("CNN score: " + str(cnn_score))
+
+
+print("MLP score: " + str(mlp_score))
+print("CNN score: " + str(cnn_score))
 #print("manual score: " + str(man_score))
 
 
 
 
-## computing the gradient of the inputs of the MLP
-#mlp_gradient = T.grad(mlp_params["output_var"][0, 0], mlp_params["input_var"])
-#compute_grad_mlp = theano.function([mlp_params["input_var"]], mlp_gradient)
-#mlp_gradient = compute_grad_mlp(X)
-## normalize the gradient
-#mlp_gradient /= np.linalg.norm(mlp_gradient)
-#
-## computing the gradient of the inputs of the CNN
-#cnn_gradient = T.grad(cnn_params["output_var"][0, 0], cnn_params["input_var"])
-#compute_grad_cnn = theano.function([cnn_params["input_var"]], cnn_gradient)
-#cnn_gradient = compute_grad_cnn(data_with_dims(X, cnn_params["input_shape"]))
-#cnn_gradient = cnn_gradient.reshape((1, 100))
-## normalize the gradient
-#cnn_gradient /= np.linalg.norm(cnn_gradient)
+# computing the gradient of the inputs of the MLP
+mlp_gradient = T.grad(mlp_params["output_var"][0, OUTPUT_NEURON_SELECTED], mlp_params["input_var"])
+compute_grad_mlp = theano.function(
+        [mlp_params["input_var"]], mlp_gradient, allow_input_downcast=True)
+mlp_gradient = compute_grad_mlp(X[[0]])
+# normalize the gradient
+mlp_gradient /= np.linalg.norm(mlp_gradient)
+
+# computing the gradient of the inputs of the CNN
+cnn_gradient = T.grad(cnn_params["output_var"][0, OUTPUT_NEURON_SELECTED], cnn_params["input_var"])
+compute_grad_cnn = theano.function(
+        [cnn_params["input_var"]], cnn_gradient, allow_input_downcast=True)
+cnn_gradient = compute_grad_cnn(X.reshape(cnn_params["network_input_shape"])[[0]])
+cnn_gradient = cnn_gradient.reshape((1, 100))
+# normalize the gradient
+cnn_gradient /= np.linalg.norm(cnn_gradient)
 
 
 

@@ -4,13 +4,14 @@ import numpy as np
 
 def build_custom_ringpredictor(params, input_var=None):
     # Input layer
-    current_layer = lasagne.layers.InputLayer(shape=(params["network_input_shape"]),
-                                    input_var=input_var)
+    current_layer = lasagne.layers.InputLayer(
+            shape=(None,) + params["network_input_shape"][1:], input_var=input_var)
 
     # create coordinates of blob centers on ring
     n_centers = 8
     radius = 1
-    class_means = radius*np.array([[np.cos(i*2.*np.pi/n_centers),np.sin(i*2.*np.pi/n_centers)] for i in range(n_centers)])
+    class_means = radius*np.array(
+        [[np.cos(i*2.*np.pi/n_centers), np.sin(i*2.*np.pi/n_centers)] for i in range(n_centers)])
     class_1_centers = class_means[0::2]
     class_2_centers = class_means[1::2]
     precomputed_W = np.concatenate((class_1_centers, class_2_centers)).T
@@ -27,8 +28,8 @@ def build_custom_ringpredictor(params, input_var=None):
 
 
 def build_mlp(params, input_var=None):
-    current_layer = lasagne.layers.InputLayer(shape=(params["network_input_shape"]),
-                                              input_var=input_var)
+    current_layer = lasagne.layers.InputLayer(
+            shape=(None,) + params["network_input_shape"][1:], input_var=input_var)
     # Hidden layers
     for layer_size in params["layer_sizes"]:
         if layer_size == 0:
@@ -46,28 +47,20 @@ def build_mlp(params, input_var=None):
 
 def build_cnn(params, input_var):
     # Input layer
-    current_layer = lasagne.layers.InputLayer(shape=(None,
-                                                     1,
-                                                     params["input_shape"][0],
-                                                     params["input_shape"][1]),
-                                            input_var=input_var)
+    current_layer = lasagne.layers.InputLayer(
+            shape=(None,) + params["network_input_shape"][1:], input_var=input_var)
     # Hidden layers
     n_filters = 15
-    current_layer = lasagne.layers.Conv2DLayer(current_layer,
-                        num_filters=n_filters,
-                        filter_size=(3, 3),
-                        pad="same",
-                        nonlinearity=lasagne.nonlinearities.rectify)
+    current_layer = lasagne.layers.Conv2DLayer(
+        current_layer, num_filters=n_filters, filter_size=(3, 3), pad="same",
+        nonlinearity=lasagne.nonlinearities.rectify)
     n_filters = 4
-    current_layer = lasagne.layers.Conv2DLayer(current_layer,
-                        num_filters=n_filters,
-                        filter_size=(3, 3),
-                        pad="same",
-                        nonlinearity=lasagne.nonlinearities.rectify)
+    current_layer = lasagne.layers.Conv2DLayer(
+        current_layer, num_filters=n_filters, filter_size=(3, 3),
+        pad="same", nonlinearity=lasagne.nonlinearities.rectify)
 
     # Output layer
     l_out = lasagne.layers.DenseLayer(
             current_layer, num_units=params["n_classes"],
             nonlinearity=lasagne.nonlinearities.softmax)
     return l_out
-

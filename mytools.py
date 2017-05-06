@@ -30,7 +30,7 @@ def get_CLI_parameters(argv):
     params["minibatch_size"] = 30
     params["horseshoe_distractors"] = True
     params["specific_dataclass"] = None
-    params["network_input_shape"] = (None, 100)
+    params["network_input_shape"] = (None, 1, 10, 10)
     params["lr"] = 0.01  # learning rate
 
     # extract layer sizes from input string
