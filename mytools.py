@@ -31,7 +31,7 @@ def get_CLI_parameters(argv):
     params["horseshoe_distractors"] = True
     params["specific_dataclass"] = None
     params["network_input_shape"] = (None, 1, 10, 10)
-    params["lr"] = 0.01  # learning rate
+    params["lr"] = 0.002  # learning rate
 
     # extract layer sizes from input string
     layer_list = []

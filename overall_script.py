@@ -485,36 +485,36 @@ def plot_w_or_patterns(what_to_plot):
         plt.quiver(X_pos[0, 0], X_pos[0, 1], plot_vector[0], plot_vector[1], scale=None)
 
 
-## RING DATA
-## train MLP on ring data
-#params["layer_sizes"] = [8, 8]
-#params["data"] = "ring"
-#params["model"] = "custom"
-#params["input_shape"] = (2,)
-#params["n_classes"] = 2
-#network, params = train_network(params)
-#OUTPUT_NEURON_SELECTED = 1
-#VECTOR_ADJUST_CONSTANT = 3
-#
-## GRADIENTS
-#plt.figure()
-#plot_background()
-#plot_w_or_patterns(what_to_plot="gradients")
-#plt.title("gradients")
-#
-## PATTERNS
-#plt.figure()
-#plot_background()
-#plot_w_or_patterns(what_to_plot="patterns")
-#plt.title("patterns")
+######################################################################
+# RING DATA
+# train MLP on ring data
+params["layer_sizes"] = [8, 8]
+params["data"] = "ring"
+params["model"] = "mlp"
+params["n_classes"] = 2
+params["network_input_shape"] = (-1, 2)
+network, params = train_network(params)
+OUTPUT_NEURON_SELECTED = 1
+VECTOR_ADJUST_CONSTANT = 3
 
+# GRADIENTS
+plt.figure()
+plot_background()
+plot_w_or_patterns(what_to_plot="gradients")
+plt.title("gradients")
 
+# PATTERNS
+plt.figure()
+plot_background()
+plot_w_or_patterns(what_to_plot="patterns")
+plt.title("patterns")
 
-
-
-
+######################################################################
+# HORSESHOE DATA
 # regular mlp
 params["model"] = "mlp"
+params["data"] = "horseshoe"
+params["n_classes"] = 4
 params["network_input_shape"] = (-1, 100)
 params["layer_sizes"] = [100, 10]  # as requested by pieter-jan
 mlp, mlp_params = train_network(params.copy())
@@ -548,9 +548,8 @@ print("MLP score: " + str(mlp_score))
 print("CNN score: " + str(cnn_score))
 #print("manual score: " + str(man_score))
 
-
-
-
+############
+# GRADIENTS
 # computing the gradient of the inputs of the MLP
 mlp_gradient = T.grad(mlp_params["output_var"][0, OUTPUT_NEURON_SELECTED], mlp_params["input_var"])
 compute_grad_mlp = theano.function(
@@ -568,52 +567,46 @@ cnn_gradient = cnn_gradient.reshape((1, 100))
 # normalize the gradient
 cnn_gradient /= np.linalg.norm(cnn_gradient)
 
+######
+# get an input point for which we want the weights / patterns
+params["specific_dataclass"] = 0
+X, y = create_data(params, 1)
+# get A via Haufe method
+params["specific_dataclass"] = None
+X_train, y_train = create_data(params, 500)
+A = get_horseshoe_pattern(params["horseshoe_distractors"])
+y = one_hot_encoding(y_train, params["n_classes"])
+Sigma_s = np.cov(y.T)
+Sigma_X = np.cov(X_train.T)
 
+# MLP
+W_mlp = get_gradients(X, mlp_params)[0]
+A_haufe_mlp = np.dot(np.dot(Sigma_X, W_mlp), Sigma_s)
 
+# CNN
+W_cnn = get_gradients(X.reshape(cnn_params["network_input_shape"]), cnn_params)
+W_cnn = W_cnn.reshape(
+        (np.prod(cnn_params["network_input_shape"][1:]), cnn_params["n_classes"]))
+A_haufe_cnn = np.dot(np.dot(Sigma_X, W_cnn), Sigma_s)
 
-## get an input point for which we want the weights / patterns
-#params["specific_dataclass"] = 0
-#params["input_shape"] = [100]
-#X, y = create_data(params, 1)
-#X.shape
-#
-#len(mlp_params["input_shape"])
-#
-## get A via Haufe method
-#params["specific_dataclass"] = None
-#X_train, y_train = create_data(params, 500)
-#A = get_horseshoe_pattern(params["horseshoe_distractors"])
-#y = one_hot_encoding(y_train, params["n_classes"])
-#Sigma_s = np.cov(y.T)
-#Sigma_X = np.cov(X_train.T)
-#W_mlp = get_W_from_gradients(X, mlp_params)
-#A_haufe_mlp = np.dot(np.dot(Sigma_X, W_mlp), Sigma_s)
-#W_cnn = get_W_from_gradients(data_with_dims(X, cnn_params["input_shape"]), cnn_params)
-#A_haufe_cnn = np.dot(np.dot(Sigma_X, W_cnn), Sigma_s)
-#
-## plot real pattern, input point, weights and haufe pattern for MLP
-#grad_mlp = W_mlp[:, 0]
-#fig, axes = plt.subplots(1, 4)
-#plot_heatmap(A[:, 0].reshape((10, 10)), axis=axes[0], title="True A")
-#plot_heatmap(X.reshape((10, 10)), axis=axes[1], title="input point")
-#plot_heatmap(grad_mlp.reshape((10, 10)), axis=axes[2], title="W")
-#plot_heatmap(A_haufe_mlp[:, 0].reshape((10, 10)), axis=axes[3], title="A Haufe 2013")
-#plt.suptitle("MLP", size=16)
-#plt.show()
-#
-## plot real pattern, input point, weights and haufe pattern for CNN
-#grad_cnn = W_cnn[:, 0]
-#fig, axes = plt.subplots(1, 4)
-#plot_heatmap(A[:, 0].reshape((10, 10)), axis=axes[0], title="True A")
-#plot_heatmap(X.reshape((10, 10)), axis=axes[1], title="input point")
-#plot_heatmap(grad_cnn.reshape((10, 10)), axis=axes[2], title="W")
-#plot_heatmap(A_haufe_cnn[:, 0].reshape((10, 10)), axis=axes[3], title="A Haufe 2013")
-#plt.suptitle("CNN", size=16)
-#plt.show()
+# plot real pattern, input point, weights and haufe pattern for MLP
+grad_mlp = W_mlp[:, 0]
+fig, axes = plt.subplots(1, 4)
+plot_heatmap(A[:, 0].reshape((10, 10)), axis=axes[0], title="True A")
+plot_heatmap(X.reshape((10, 10)), axis=axes[1], title="input point")
+plot_heatmap(grad_mlp.reshape((10, 10)), axis=axes[2], title="W")
+plot_heatmap(A_haufe_mlp[:, 0].reshape((10, 10)), axis=axes[3], title="A Haufe 2013")
+plt.suptitle("MLP", size=16)
 
+# plot real pattern, input point, weights and haufe pattern for CNN
+grad_cnn = W_cnn[:, 0]
+fig, axes = plt.subplots(1, 4)
+plot_heatmap(A[:, 0].reshape((10, 10)), axis=axes[0], title="True A")
+plot_heatmap(X.reshape((10, 10)), axis=axes[1], title="input point")
+plot_heatmap(grad_cnn.reshape((10, 10)), axis=axes[2], title="W")
+plot_heatmap(A_haufe_cnn[:, 0].reshape((10, 10)), axis=axes[3], title="A Haufe 2013")
+plt.suptitle("CNN", size=16)
 
-
-
-
+#######
 if params["do_plotting"]:
     plt.show()
