@@ -28,12 +28,11 @@ def build_custom_ringpredictor(params, input_var=None):
 
 def build_mlp(params, input_var=None):
     current_layer = lasagne.layers.InputLayer(shape=(params["network_input_shape"]),
-                                    input_var=input_var)
+                                              input_var=input_var)
     # Hidden layers
     for layer_size in params["layer_sizes"]:
         if layer_size == 0:
-            print("Zero layer requested, ignoring...")
-            continue
+            raise ValueError("Layer size 0 requested")
         current_layer = lasagne.layers.DenseLayer(
             current_layer, num_units=layer_size,
             nonlinearity=lasagne.nonlinearities.rectify,

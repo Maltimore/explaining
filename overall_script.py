@@ -23,8 +23,7 @@ else:
 
 def one_hot_encoding(target, n_classes):
     if len(target.shape) > 1:
-        if target.shape[1] > 1:
-            raise ValueError("target should be of shape [n_samples, 1]")
+        raise ValueError("target should be of shape (n_samples,)")
     target = target.flatten()
     encoding = np.eye(n_classes)[target]
     return encoding
@@ -32,9 +31,9 @@ def one_hot_encoding(target, n_classes):
 
 def get_horseshoe_pattern(horseshoe_distractors):
     if horseshoe_distractors:
-        A = np.empty((params["input_dim"], 8))
+        A = np.empty((100, 8))
     else:
-        A = np.empty((params["input_dim"], 4))
+        A = np.empty((100, 4))
 
     # create the patterns for the actual classes
     pic = np.zeros((10, 10))
@@ -106,30 +105,27 @@ def create_horseshoe_data(params, N):
     A = get_horseshoe_pattern(params["horseshoe_distractors"])
 
     if params["specific_dataclass"] is not None:
-        # this will/should only be triggered if N=1, in this case the user
+        # this should only be triggered if N=1, in this case the user
         # requests a datapoint of a specific class
         if N != 1:
             raise("specific_dataclass is set so N should be 1")
-        y_true = np.array([params["specific_dataclass"]])[:, na]
+        y = np.array([params["specific_dataclass"]])
     else:
         # if no specific class is requested, generate classes randomly
-        y_true = np.random.randint(low=0, high=4, size=N)[:, na]
+        y = np.random.randint(low=0, high=4, size=N)
 
-    y = one_hot_encoding(y_true, params["n_classes"]).T
+    y_onehot = one_hot_encoding(y, params["n_classes"]).T
 
     if params["horseshoe_distractors"]:
         y_dist = np.random.normal(size=(4, N))
-        y = np.concatenate((y, y_dist), axis=0)
+        y_onehot = np.concatenate((y_onehot, y_dist), axis=0)
 
     # create X by multiplying the target vector with the patterns,
     # and tranpose because we want the data to be in [samples, features] form
-    X = np.dot(A, y).T
-
+    X = np.dot(A, y_onehot).T
     for idx in range(X.shape[0]):
         X[idx, :] += (np.random.normal(size=(100))*params["noise_scale"])
-
-    y = y_true.astype(np.int32)
-    return X, y
+    return X, y.astype(np.int32)
 
 
 def create_ring_data(params, N):
@@ -183,6 +179,9 @@ def train_network(params):
         X_val = X_val.reshape(params["network_input_shape"])
         X_test = X_test.reshape(params["network_input_shape"])
 
+    if not params["network_input_shape"][1:] == X_train.shape[1:]:
+        raise ValueError("parameter network_input_shape didn't fit train data")
+
     print("Building model and compiling functions...")
     input_var = T.matrix('inputs')
     target_var = T.matrix('targets')
@@ -191,20 +190,13 @@ def train_network(params):
     elif params["model"] == "cnn":
         network = networks.build_cnn(params, input_var)
     elif params["model"] == "custom":
-        input_var = T.matrix('inputs')
         network = networks.build_custom_ringpredictor(params, input_var)
     output_var = lasagne.layers.get_output(network)
 
-    if params["loss_choice"] == "categorical_crossentropy":
-        loss = lasagne.objectives.categorical_crossentropy(output_var, target_var)
-        test_loss = lasagne.objectives.categorical_crossentropy(output_var, target_var)
-    elif params["loss_choice"] == "MSE":
-        loss = lasagne.objectives.squared_error(output_var, target_var)
-        test_loss = lasagne.objectives.squared_error(output_var, target_var)
+    loss = lasagne.objectives.categorical_crossentropy(output_var, target_var)
 
     # average loss expressions
     loss = loss.mean()
-    test_loss = test_loss.mean()
 
     network_params = lasagne.layers.get_all_params(network, trainable=True)
     updates = lasagne.updates.nesterov_momentum(
@@ -214,13 +206,13 @@ def train_network(params):
     params["input_var"] = input_var
     params["target_var"] = target_var
     params["output_var"] = output_var
-    params["get_output_func"] = theano.function([input_var],
-            output_var, allow_input_downcast=True)
+    params["output_func"] = theano.function(
+            [input_var], output_var, allow_input_downcast=True)
 
     # Create an expression for the classification accuracy:
     prediction_var = T.argmax(output_var, axis=1)
-    params["prediction_func"] = theano.function([input_var],
-                        prediction_var, allow_input_downcast=True)
+    params["prediction_func"] = theano.function(
+            [input_var], prediction_var, allow_input_downcast=True)
 
     if params["model"] == "custom":
         return network, params
@@ -229,7 +221,6 @@ def train_network(params):
     # the updates dictionary) and returning the corresponding training loss:
     train_fn = theano.function([input_var, target_var],
                                loss, updates=updates, allow_input_downcast=True)
-
 
     # TRAINING LOOP
     print("Starting training...")
@@ -388,7 +379,6 @@ def compute_accuracy(y, y_hat):
 def get_gradients(X, params):
     """get_gradients
 
-
     :param X: array, shape (1,) + network_input_shape[1:]
          X should be a single input sample in the shape that
          gets accepted by the network
@@ -402,7 +392,8 @@ def get_gradients(X, params):
     gradients = np.empty(X.shape + (params["n_classes"],))
     for output_idx in range(params["n_classes"]):
         gradient_var = T.grad(params["output_var"][0, output_idx], params["input_var"])
-        compute_grad = theano.function([params["input_var"]], gradient_var, allow_input_downcast=True)
+        compute_grad = theano.function(
+                [params["input_var"]], gradient_var, allow_input_downcast=True)
         for sample_idx in range(X.shape[0]):
             gradients[sample_idx, ..., output_idx] = compute_grad(X[[sample_idx]])
     return gradients
@@ -425,7 +416,7 @@ def plot_background():
                          np.arange(y_min, y_max, h))
     mesh = np.c_[xx.ravel(), yy.ravel()]
 
-    Z = params["get_output_func"](mesh)
+    Z = params["output_func"](mesh)
     Z = Z[:, OUTPUT_NEURON_SELECTED]
 
     # Put the result into a color plot
@@ -491,41 +482,39 @@ def plot_w_or_patterns(what_to_plot):
         plt.quiver(X_pos[0, 0], X_pos[0, 1], plot_vector[0], plot_vector[1], scale=None)
 
 
-# RING DATA
-# train MLP on ring data
-params["layer_sizes"] = [8, 8]
-params["data"] = "ring"
+## RING DATA
+## train MLP on ring data
+#params["layer_sizes"] = [8, 8]
+#params["data"] = "ring"
+#params["model"] = "custom"
+#params["input_shape"] = (2,)
+#params["n_classes"] = 2
+#network, params = train_network(params)
+#OUTPUT_NEURON_SELECTED = 1
+#VECTOR_ADJUST_CONSTANT = 3
+#
+## GRADIENTS
+#plt.figure()
+#plot_background()
+#plot_w_or_patterns(what_to_plot="gradients")
+#plt.title("gradients")
+#
+## PATTERNS
+#plt.figure()
+#plot_background()
+#plot_w_or_patterns(what_to_plot="patterns")
+#plt.title("patterns")
+
+
+
+
+
+
+# regular mlp
 params["model"] = "mlp"
-params["input_shape"] = (2,)
-params["network_input_shape"] = (None, 2)
-params["n_classes"] = 2
-network, params = train_network(params)
-OUTPUT_NEURON_SELECTED = 1
-VECTOR_ADJUST_CONSTANT = 3
-
-# GRADIENTS
-plt.figure()
-plot_background()
-plot_w_or_patterns(what_to_plot="gradients")
-plt.title("gradients")
-
-# PATTERNS
-plt.figure()
-plot_background()
-plot_w_or_patterns(what_to_plot="patterns")
-plt.title("patterns")
-
-
-
-
-
-
-## regular mlp
-#params["model"] = "mlp"
-#params["layer_sizes"] = [100, 100, 10] # as requested by pieter-jan
-#mlp, mlp_params = train_network(params)
-#mlp_params["input_shape"] = [100]
-#mlp_prediction_func = mlp_params["prediction_func"]
+params["layer_sizes"] = [100, 100, 10] # as requested by pieter-jan
+mlp, mlp_params = train_network(params)
+mlp_prediction_func = mlp_params["prediction_func"]
 #
 #params["model"] = "cnn"
 #cnn, cnn_params = train_network(params)

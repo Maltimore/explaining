@@ -18,7 +18,7 @@ def get_CLI_parameters(argv):
     parser.add_argument("-p", "--do_plotting", default=True)
     parser.add_argument("--verbose", default=True)
     parser.add_argument("-d", "--data", default="horseshoe")
-    parser.add_argument("-c", "--n_classes", default="2", type=int)
+    parser.add_argument("-c", "--n_classes", default="4", type=int)
     parser.add_argument("-b", "--bias_in_data", default=False)
     parser.add_argument("-r", "--remote", default=False)
     parser.add_argument("-n", "--name", default="default")
@@ -29,9 +29,9 @@ def get_CLI_parameters(argv):
     params["N_test"] = 300
     params["minibatch_size"] = 30
     params["horseshoe_distractors"] = True
-    params["network_input_shape"] = (-1, 2)
     params["specific_dataclass"] = None
-    params["lr"] = 0.01 # learning rate
+    params["network_input_shape"] = (None, 100)
+    params["lr"] = 0.01  # learning rate
 
     # extract layer sizes from input string
     layer_list = []
