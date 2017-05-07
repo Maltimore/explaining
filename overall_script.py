@@ -293,7 +293,7 @@ def plot_heatmap(R_i, axis=None, title=""):
     plt.colorbar(plot, ax=axis)
 
 
-def forward_pass(func_input, network, input_var, params):
+def forward_pass(X, network, input_var, params):
     """
     IMPORTANT: THIS FUNCTION CAN ONLY BE CALLED WITH A SINGLE INPUT SAMPLE
     the function expects a row vector
@@ -301,21 +301,9 @@ def forward_pass(func_input, network, input_var, params):
     get_activations = theano.function([input_var],
                 lasagne.layers.get_output(lasagne.layers.get_all_layers(network)), 
                 allow_input_downcast=True)
-    # in the following, the dimension has to be expanded because we're
-    # performing a forward pass of just one input sample here but the network
-    # expects several
-    if func_input.ndim == 1:
-        activations = get_activations(np.expand_dims(func_input, axis=0))
-    elif func_input.ndim == 2:
-        if func_input.shape[0] > 1:
-            raise("ERROR: only pass a single datapoint to forward_pass()!")
-        activations = get_activations(func_input)
-    elif activations.ndim > 2:
-        raise("Input data had too many dimensions")
-
-    # Transpose all activation vectors so that they are column vectors
-    for idx in range(len(activations)):
-        activations[idx] = activations[idx].T
+    activations = get_activations(X)
+    for i in range(len(activations)):
+        activations[i] = activations[i].squeeze()
     return activations
 
 
@@ -331,7 +319,7 @@ def get_network_parameters(network, bias_in_data):
     for idx in range(len(W_mats)):
         W_mats[idx] = W_mats[idx].T
         if not bias_in_data:
-            biases[idx] = np.atleast_2d(biases[idx]).T
+            biases[idx] = biases[idx]
 
     if bias_in_data:
         return W_mats
@@ -339,15 +327,15 @@ def get_network_parameters(network, bias_in_data):
         return W_mats, biases
 
 
-def LRP(func_input, network, output_neuron, params, epsilon = .01):
+def LRP(X, network, output_neuron, params, epsilon = .01):
 
     W_mats, biases = get_network_parameters(network, params["bias_in_data"])
-    activations = forward_pass(func_input, network, params["input_var"], params)
+    activations = forward_pass(X, network, params["input_var"], params)
 
-    # --- forward propagation to compute preactivations ---
+    # --- manual forward propagation to compute preactivations ---
     preactivations = []
-    for W, b, X in zip(W_mats, biases, activations):
-        preactivation = np.dot(W, X) + np.expand_dims(b, 1)
+    for W, b, activation in zip(W_mats, biases, activations):
+        preactivation = np.dot(W, activation) + np.expand_dims(b, 1)
         preactivations.append(preactivation)
 
     # --- relevance backpropagation ---
@@ -358,8 +346,61 @@ def LRP(func_input, network, output_neuron, params, epsilon = .01):
         R_over_z = np.divide(R, preactivations[-idx].squeeze() + epsilon)
         Z_ij = np.multiply(W_mats[-idx], activations[-idx-1].T + epsilon)
         R = np.sum(np.multiply(Z_ij.T, R_over_z), axis=1)
-    R = R.reshape((func_input.shape))
+    R = R.reshape((X.shape))
     return R
+
+
+def LRP2(X, network, output_neuron, params, epsilon=.01):
+
+    W_mats, biases = get_network_parameters(network, params["bias_in_data"])
+    activations = forward_pass(X, network, params["input_var"], params)
+
+    # --- manual forward propagation to compute preactivations ---
+    preactivations = [None, ]  # the first preactivations are trivial / the input
+    for W, b, activation in zip(W_mats, biases, activations):
+        preactivation = np.dot(W, activation) + b
+        preactivations.append(preactivation)
+
+    # --- relevance backpropagation ---
+    # the first backpass is special so it can't be in the loop
+    R = np.array([activations[-1][output_neuron], ])
+    for idx in np.arange(len(activations)-2, -1, -1):
+        R = epsilon_rule(R, W_mats[idx], activations[idx], preactivations[idx+1], epsilon)
+
+    R = R.reshape((X.shape))
+    return R
+
+
+def epsilon_rule(relevance_next_layer, W, activations_current_layer, preactivations_next_layer,
+                 epsilon):
+    """epsilon_rule
+
+    :param relevance_next_layer: shape (n_neurons_next,)
+    :param W: weight matrix shape (n_neurons_next, n_neurons_current)
+    :param activations_current_layer: shape (n_neurons_current,)
+    :param preactivations_next_layer: shape (n_neurons_next,)
+    """
+
+    # input checks
+    if not (len(relevance_next_layer.shape) == 1 and
+       len(activations_current_layer.shape) == 1 and
+       len(preactivations_next_layer.shape) == 1):
+        raise ValueError("Relevances and activations must all have shape (n_neurons,)")
+
+    # R_message_matrix of shape (n_current_layer, n_next_layer)
+    R_message_matrix = np.empty(shape=(activations_current_layer.shape[0],
+                                       preactivations_next_layer.shape[0]))
+
+    for j, z_j in enumerate(preactivations_next_layer):
+        R_messages_from_j = W[j] * activations_current_layer
+        if z_j >= 0:
+            R_messages_from_j /= z_j + epsilon
+        elif z_j < 0:
+            R_messages_from_j /= z_j - epsilon
+        R_message_matrix[:, j] = R_messages_from_j
+    R_current = np.sum(R_message_matrix, axis=1)
+    return R_current
+
 
 
 def compute_accuracy(y, y_hat):
@@ -497,6 +538,9 @@ network, params = train_network(params)
 OUTPUT_NEURON_SELECTED = 1
 VECTOR_ADJUST_CONSTANT = 3
 
+X, y = create_data(params, 1)
+LRP2(X, network, 0, params)
+
 # GRADIENTS
 plt.figure()
 plot_background()
@@ -509,103 +553,103 @@ plot_background()
 plot_w_or_patterns(what_to_plot="patterns")
 plt.title("patterns")
 
-######################################################################
-# HORSESHOE DATA
-# regular mlp
-params["model"] = "mlp"
-params["data"] = "horseshoe"
-params["n_classes"] = 4
-params["network_input_shape"] = (-1, 100)
-params["layer_sizes"] = [100, 10]  # as requested by pieter-jan
-mlp, mlp_params = train_network(params.copy())
-mlp_prediction_func = mlp_params["prediction_func"]
-
-params["model"] = "cnn"
-params["network_input_shape"] = (-1, 1, 10, 10)
-params["epochs"] = 2
-cnn, cnn_params = train_network(params.copy())
-cnn_prediction_func = cnn_params["prediction_func"]
-
-# ### compare prediction scores ###
-# some more data
-X, y = create_data(params, 500)
-
-# predict with mlp
-mlp_prediction = mlp_prediction_func(X)
-mlp_score = compute_accuracy(y, mlp_prediction)
-
-
-# predict with cnn
-cnn_prediction = cnn_prediction_func(X.reshape(params["network_input_shape"]))
-cnn_score = compute_accuracy(y, cnn_prediction)
-
-# manually predict
-#man_prediction = manual_classification(X[:, 0, :, :])
-#man_score = compute_accuracy(y, man_prediction)
-
-
-print("MLP score: " + str(mlp_score))
-print("CNN score: " + str(cnn_score))
-#print("manual score: " + str(man_score))
-
-############
-# GRADIENTS
-# computing the gradient of the inputs of the MLP
-mlp_gradient = T.grad(mlp_params["output_var"][0, OUTPUT_NEURON_SELECTED], mlp_params["input_var"])
-compute_grad_mlp = theano.function(
-        [mlp_params["input_var"]], mlp_gradient, allow_input_downcast=True)
-mlp_gradient = compute_grad_mlp(X[[0]])
-# normalize the gradient
-mlp_gradient /= np.linalg.norm(mlp_gradient)
-
-# computing the gradient of the inputs of the CNN
-cnn_gradient = T.grad(cnn_params["output_var"][0, OUTPUT_NEURON_SELECTED], cnn_params["input_var"])
-compute_grad_cnn = theano.function(
-        [cnn_params["input_var"]], cnn_gradient, allow_input_downcast=True)
-cnn_gradient = compute_grad_cnn(X.reshape(cnn_params["network_input_shape"])[[0]])
-cnn_gradient = cnn_gradient.reshape((1, 100))
-# normalize the gradient
-cnn_gradient /= np.linalg.norm(cnn_gradient)
-
-######
-# get an input point for which we want the weights / patterns
-params["specific_dataclass"] = 0
-X, y = create_data(params, 1)
-# get A via Haufe method
-params["specific_dataclass"] = None
-X_train, y_train = create_data(params, 500)
-A = get_horseshoe_pattern(params["horseshoe_distractors"])
-y = one_hot_encoding(y_train, params["n_classes"])
-Sigma_s = np.cov(y.T)
-Sigma_X = np.cov(X_train.T)
-
-# MLP
-W_mlp = get_gradients(X, mlp_params)[0]
-A_haufe_mlp = np.dot(np.dot(Sigma_X, W_mlp), Sigma_s)
-
-# CNN
-W_cnn = get_gradients(X.reshape(cnn_params["network_input_shape"]), cnn_params)
-W_cnn = W_cnn.reshape(
-        (np.prod(cnn_params["network_input_shape"][1:]), cnn_params["n_classes"]))
-A_haufe_cnn = np.dot(np.dot(Sigma_X, W_cnn), Sigma_s)
-
-# plot real pattern, input point, weights and haufe pattern for MLP
-grad_mlp = W_mlp[:, 0]
-fig, axes = plt.subplots(1, 4)
-plot_heatmap(A[:, 0].reshape((10, 10)), axis=axes[0], title="True A")
-plot_heatmap(X.reshape((10, 10)), axis=axes[1], title="input point")
-plot_heatmap(grad_mlp.reshape((10, 10)), axis=axes[2], title="W")
-plot_heatmap(A_haufe_mlp[:, 0].reshape((10, 10)), axis=axes[3], title="A Haufe 2013")
-plt.suptitle("MLP", size=16)
-
-# plot real pattern, input point, weights and haufe pattern for CNN
-grad_cnn = W_cnn[:, 0]
-fig, axes = plt.subplots(1, 4)
-plot_heatmap(A[:, 0].reshape((10, 10)), axis=axes[0], title="True A")
-plot_heatmap(X.reshape((10, 10)), axis=axes[1], title="input point")
-plot_heatmap(grad_cnn.reshape((10, 10)), axis=axes[2], title="W")
-plot_heatmap(A_haufe_cnn[:, 0].reshape((10, 10)), axis=axes[3], title="A Haufe 2013")
-plt.suptitle("CNN", size=16)
+#######################################################################
+## HORSESHOE DATA
+## regular mlp
+#params["model"] = "mlp"
+#params["data"] = "horseshoe"
+#params["n_classes"] = 4
+#params["network_input_shape"] = (-1, 100)
+#params["layer_sizes"] = [100, 10]  # as requested by pieter-jan
+#mlp, mlp_params = train_network(params.copy())
+#mlp_prediction_func = mlp_params["prediction_func"]
+#
+#params["model"] = "cnn"
+#params["network_input_shape"] = (-1, 1, 10, 10)
+#params["epochs"] = 2
+#cnn, cnn_params = train_network(params.copy())
+#cnn_prediction_func = cnn_params["prediction_func"]
+#
+## ### compare prediction scores ###
+## some more data
+#X, y = create_data(params, 500)
+#
+## predict with mlp
+#mlp_prediction = mlp_prediction_func(X)
+#mlp_score = compute_accuracy(y, mlp_prediction)
+#
+#
+## predict with cnn
+#cnn_prediction = cnn_prediction_func(X.reshape(params["network_input_shape"]))
+#cnn_score = compute_accuracy(y, cnn_prediction)
+#
+## manually predict
+##man_prediction = manual_classification(X[:, 0, :, :])
+##man_score = compute_accuracy(y, man_prediction)
+#
+#
+#print("MLP score: " + str(mlp_score))
+#print("CNN score: " + str(cnn_score))
+##print("manual score: " + str(man_score))
+#
+#############
+## GRADIENTS
+## computing the gradient of the inputs of the MLP
+#mlp_gradient = T.grad(mlp_params["output_var"][0, OUTPUT_NEURON_SELECTED], mlp_params["input_var"])
+#compute_grad_mlp = theano.function(
+#        [mlp_params["input_var"]], mlp_gradient, allow_input_downcast=True)
+#mlp_gradient = compute_grad_mlp(X[[0]])
+## normalize the gradient
+#mlp_gradient /= np.linalg.norm(mlp_gradient)
+#
+## computing the gradient of the inputs of the CNN
+#cnn_gradient = T.grad(cnn_params["output_var"][0, OUTPUT_NEURON_SELECTED], cnn_params["input_var"])
+#compute_grad_cnn = theano.function(
+#        [cnn_params["input_var"]], cnn_gradient, allow_input_downcast=True)
+#cnn_gradient = compute_grad_cnn(X.reshape(cnn_params["network_input_shape"])[[0]])
+#cnn_gradient = cnn_gradient.reshape((1, 100))
+## normalize the gradient
+#cnn_gradient /= np.linalg.norm(cnn_gradient)
+#
+#######
+## get an input point for which we want the weights / patterns
+#params["specific_dataclass"] = 0
+#X, y = create_data(params, 1)
+## get A via Haufe method
+#params["specific_dataclass"] = None
+#X_train, y_train = create_data(params, 500)
+#A = get_horseshoe_pattern(params["horseshoe_distractors"])
+#y = one_hot_encoding(y_train, params["n_classes"])
+#Sigma_s = np.cov(y.T)
+#Sigma_X = np.cov(X_train.T)
+#
+## MLP
+#W_mlp = get_gradients(X, mlp_params)[0]
+#A_haufe_mlp = np.dot(np.dot(Sigma_X, W_mlp), Sigma_s)
+#
+## CNN
+#W_cnn = get_gradients(X.reshape(cnn_params["network_input_shape"]), cnn_params)
+#W_cnn = W_cnn.reshape(
+#        (np.prod(cnn_params["network_input_shape"][1:]), cnn_params["n_classes"]))
+#A_haufe_cnn = np.dot(np.dot(Sigma_X, W_cnn), Sigma_s)
+#
+## plot real pattern, input point, weights and haufe pattern for MLP
+#grad_mlp = W_mlp[:, 0]
+#fig, axes = plt.subplots(1, 4)
+#plot_heatmap(A[:, 0].reshape((10, 10)), axis=axes[0], title="True A")
+#plot_heatmap(X.reshape((10, 10)), axis=axes[1], title="input point")
+#plot_heatmap(grad_mlp.reshape((10, 10)), axis=axes[2], title="W")
+#plot_heatmap(A_haufe_mlp[:, 0].reshape((10, 10)), axis=axes[3], title="A Haufe 2013")
+#plt.suptitle("MLP", size=16)
+#
+## plot real pattern, input point, weights and haufe pattern for CNN
+#grad_cnn = W_cnn[:, 0]
+#fig, axes = plt.subplots(1, 4)
+#plot_heatmap(A[:, 0].reshape((10, 10)), axis=axes[0], title="True A")
+#plot_heatmap(X.reshape((10, 10)), axis=axes[1], title="input point")
+#plot_heatmap(grad_cnn.reshape((10, 10)), axis=axes[2], title="W")
+#plot_heatmap(A_haufe_cnn[:, 0].reshape((10, 10)), axis=axes[3], title="A Haufe 2013")
+#plt.suptitle("CNN", size=16)
 
 #######
 if params["do_plotting"]:
