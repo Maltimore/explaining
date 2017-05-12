@@ -327,7 +327,10 @@ def get_network_parameters(network, bias_in_data):
         return W_mats, biases
 
 
-def LRP(X, network, output_neuron, params, epsilon = .01):
+def LRP_old(X, network, output_neuron, params, epsilon=.01):
+    """
+    OLD VERSION DO NOT USE (JUST FOR COMPARISON)
+    """
 
     W_mats, biases = get_network_parameters(network, params["bias_in_data"])
     activations = forward_pass(X, network, params["input_var"], params)
@@ -350,57 +353,114 @@ def LRP(X, network, output_neuron, params, epsilon = .01):
     return R
 
 
-def LRP2(X, network, output_neuron, params, epsilon=.01):
+def LRP(X, network, output_neuron, params, rule="epsilon", use_rule="epsilon", epsilon=.01,
+        alpha=0.5):
 
     W_mats, biases = get_network_parameters(network, params["bias_in_data"])
     activations = forward_pass(X, network, params["input_var"], params)
 
-    # --- manual forward propagation to compute preactivations ---
-    preactivations = [None, ]  # the first preactivations are trivial / the input
-    for W, b, activation in zip(W_mats, biases, activations):
-        preactivation = np.dot(W, activation) + b
-        preactivations.append(preactivation)
-
     # --- relevance backpropagation ---
-    # the first backpass is special so it can't be in the loop
+    # the first backpass is special so it can't be in the loop. Here we "compute" the
+    # relevance in the last layer (set relevance to activation)
     R = np.array([activations[-1][output_neuron], ])
+    # loop from end to beginning starting at the second last layer
     for idx in np.arange(len(activations)-2, -1, -1):
-        R = epsilon_rule(R, W_mats[idx], activations[idx], preactivations[idx+1], epsilon)
+        if use_rule is "epsilon":
+            R = epsilon_rule(R, W_mats[idx], biases[idx], activations[idx], epsilon)
+        elif rule == "alphabeta":
+            R = alphabeta_rule(R, W_mats[idx], biases[idx], activations[idx], alpha)
 
     R = R.reshape((X.shape))
     return R
 
 
-def epsilon_rule(relevance_next_layer, W, activations_current_layer, preactivations_next_layer,
-                 epsilon):
+def epsilon_rule(relevance_next_layer, W, b, activations_current_layer, epsilon):
     """epsilon_rule
 
     :param relevance_next_layer: shape (n_neurons_next,)
     :param W: weight matrix shape (n_neurons_next, n_neurons_current)
+        weight matrix with the weights for a particular neuron in the next layer in one row
+    :param b: bias vector for next layer of shape (n_neurons_next,)
     :param activations_current_layer: shape (n_neurons_current,)
-    :param preactivations_next_layer: shape (n_neurons_next,)
     """
+
+    # input checks
+    if not (len(relevance_next_layer.shape) == 1 and
+            len(activations_current_layer.shape) == 1):
+        raise ValueError("Relevances and activations must all have shape (n_neurons,)")
+    if not len(W.shape) == 2:
+        raise ValueError("W must have shape (n_neurons_next, n_neurons_current)")
+
+    # R_message_matrix of shape (n_current_layer, n_next_layer)
+    R_message_matrix = np.empty(shape=W.T.shape)
+
+    for j in range(R_message_matrix.shape[1]):
+        # compute the inputs to j in the next layer and j's preactivation
+        inputs_to_j = W[j] * activations_current_layer
+        z_j = np.sum(inputs_to_j) + b[j]
+
+        # compute the relevance messages that neuron j sends
+        if z_j >= 0:
+            R_messages_from_j = inputs_to_j / (z_j + epsilon)
+        elif z_j < 0:
+            R_messages_from_j = inputs_to_j / (z_j - epsilon)
+
+        # insert the relevance messages into the relevance message matrix
+        R_message_matrix[:, j] = R_messages_from_j
+
+    # sum over axis 1. Every row holds relevance messages from all neurons in the next layer
+    # the a specific neuron in the current layer
+    R_current = np.sum(R_message_matrix, axis=1)
+
+    # make sure our computed relevance has the same shape as the activations in the current layer
+    assert R_current.shape == activations_current_layer.shape, "computed relevance has " + \
+                                                               "incorrect shape"
+    return R_current
+
+
+def alphabeta_rule(relevance_next_layer, W, b, activations_current_layer, alpha):
+    """alphabeta_rule
+
+    :param relevance_next_layer: shape (n_neurons_next,)
+    :param W: weight matrix shape (n_neurons_next, n_neurons_current)
+    :param b: bias vector for next layer of shape (n_neurons_next,)
+    :param activations_current_layer: shape (n_neurons_current,)
+    """
+
+    # alpha and beta have to add up to 1, so we can compute beta
+    beta = 1 - alpha
 
     # input checks
     if not (len(relevance_next_layer.shape) == 1 and
        len(activations_current_layer.shape) == 1 and
        len(preactivations_next_layer.shape) == 1):
         raise ValueError("Relevances and activations must all have shape (n_neurons,)")
+    if not len(W.shape) == 2:
+        raise ValueError("W must have shape (n_neurons_next, n_neurons_current)")
 
     # R_message_matrix of shape (n_current_layer, n_next_layer)
     R_message_matrix = np.empty(shape=(activations_current_layer.shape[0],
                                        preactivations_next_layer.shape[0]))
 
     for j, z_j in enumerate(preactivations_next_layer):
-        R_messages_from_j = W[j] * activations_current_layer
+        # compute the relevance messages that neuron j sends
+        inputs_to_j = W[j] * activations_current_layer
         if z_j >= 0:
-            R_messages_from_j /= z_j + epsilon
+            R_messages_from_j = inputs_to_j / (z_j + epsilon)
         elif z_j < 0:
-            R_messages_from_j /= z_j - epsilon
-        R_message_matrix[:, j] = R_messages_from_j
-    R_current = np.sum(R_message_matrix, axis=1)
-    return R_current
+            R_messages_from_j = inputs_to_j / (z_j - epsilon)
 
+        # insert the relevance messages into the relevance message matrix
+        R_message_matrix[:, j] = R_messages_from_j
+
+    # sum over axis 1. Every row holds relevance messages from all neurons in the next layer
+    # the a specific neuron in the current layer
+    R_current = np.sum(R_message_matrix, axis=1)
+
+    # make sure our computed relevance has the same shape as the activations in the current layer
+    assert R_current.shape == activations_current_layer.shape, "computed relevance has " + \
+                                                               "incorrect shape"
+    return R_current
 
 
 def compute_accuracy(y, y_hat):
@@ -539,7 +599,7 @@ OUTPUT_NEURON_SELECTED = 1
 VECTOR_ADJUST_CONSTANT = 3
 
 X, y = create_data(params, 1)
-LRP2(X, network, 0, params)
+LRP(X, network, 0, params, use_rule="epsilon")
 
 # GRADIENTS
 plt.figure()
