@@ -50,11 +50,11 @@ def build_cnn(params, input_var):
     current_layer = lasagne.layers.InputLayer(
             shape=(None,) + params["network_input_shape"][1:], input_var=input_var)
     # Hidden layers
-    n_filters = 15
+    n_filters = 8
     current_layer = lasagne.layers.Conv2DLayer(
         current_layer, num_filters=n_filters, filter_size=(3, 3), pad="same",
         nonlinearity=lasagne.nonlinearities.rectify)
-    n_filters = 4
+    n_filters = 8 
     current_layer = lasagne.layers.Conv2DLayer(
         current_layer, num_filters=n_filters, filter_size=(3, 3),
         pad="same", nonlinearity=lasagne.nonlinearities.rectify)
