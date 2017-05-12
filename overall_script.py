@@ -353,8 +353,7 @@ def LRP_old(X, network, output_neuron, params, epsilon=.01):
     return R
 
 
-def LRP(X, network, output_neuron, params, rule="epsilon", use_rule="epsilon", epsilon=.01,
-        alpha=0.5):
+def LRP(X, network, output_neuron, params, rule="epsilon", epsilon=.01, alpha=0.5):
 
     W_mats, biases = get_network_parameters(network, params["bias_in_data"])
     activations = forward_pass(X, network, params["input_var"], params)
@@ -365,10 +364,12 @@ def LRP(X, network, output_neuron, params, rule="epsilon", use_rule="epsilon", e
     R = np.array([activations[-1][output_neuron], ])
     # loop from end to beginning starting at the second last layer
     for idx in np.arange(len(activations)-2, -1, -1):
-        if use_rule is "epsilon":
+        if rule is "epsilon":
             R = epsilon_rule(R, W_mats[idx], biases[idx], activations[idx], epsilon)
         elif rule == "alphabeta":
             R = alphabeta_rule(R, W_mats[idx], biases[idx], activations[idx], alpha)
+        else:
+            raise Exception("Unrecognized rule selected")
 
     R = R.reshape((X.shape))
     return R
@@ -432,19 +433,23 @@ def alphabeta_rule(relevance_next_layer, W, b, activations_current_layer, alpha)
 
     # input checks
     if not (len(relevance_next_layer.shape) == 1 and
-       len(activations_current_layer.shape) == 1 and
-       len(preactivations_next_layer.shape) == 1):
+            len(activations_current_layer.shape) == 1):
         raise ValueError("Relevances and activations must all have shape (n_neurons,)")
     if not len(W.shape) == 2:
         raise ValueError("W must have shape (n_neurons_next, n_neurons_current)")
 
     # R_message_matrix of shape (n_current_layer, n_next_layer)
-    R_message_matrix = np.empty(shape=(activations_current_layer.shape[0],
-                                       preactivations_next_layer.shape[0]))
+    R_message_matrix = np.empty(shape=W.T.shape)
 
-    for j, z_j in enumerate(preactivations_next_layer):
-        # compute the relevance messages that neuron j sends
+    for j in range(R_message_matrix.shape[1]):
+        # compute the inputs to j in the next layer and j's preactivation
         inputs_to_j = W[j] * activations_current_layer
+        import pdb; pdb.set_trace()
+
+
+        z_j = np.sum(inputs_to_j) + b[j]
+
+        # compute the relevance messages that neuron j sends
         if z_j >= 0:
             R_messages_from_j = inputs_to_j / (z_j + epsilon)
         elif z_j < 0:
@@ -599,7 +604,7 @@ OUTPUT_NEURON_SELECTED = 1
 VECTOR_ADJUST_CONSTANT = 3
 
 X, y = create_data(params, 1)
-LRP(X, network, 0, params, use_rule="epsilon")
+LRP(X, network, 0, params, rule="alphabeta")
 
 # GRADIENTS
 plt.figure()
