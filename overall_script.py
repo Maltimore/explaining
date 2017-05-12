@@ -452,14 +452,19 @@ def alphabeta_rule(R, W, b, activations_current_layer, alpha):
         positive_inputs = inputs_to_j >= 0
         negative_inputs = ~positive_inputs
 
-        positive_preactivation = np.sum(inputs_to_j[positive_inputs])
-        negative_preactivation = np.sum(inputs_to_j[negative_inputs])
+        if b[j] >= 0:
+            positive_bias = b[j]
+            negative_bias = 0
+        else:
+            positive_bias = 0
+            negative_bias = b[j]
 
-        # compute the relevance messages that neuron j sends
-        if z_j >= 0:
-            R_messages_from_j = inputs_to_j / (z_j + epsilon)
-        elif z_j < 0:
-            R_messages_from_j = inputs_to_j / (z_j - epsilon)
+        positive_preactivation = np.sum(inputs_to_j[positive_inputs]) + positive_bias
+        negative_preactivation = np.sum(inputs_to_j[negative_inputs]) + negative_bias
+
+        R_messages_from_j = R[j] * (
+                    alpha * positive_inputs / positive_preactivation +
+                    beta  * negative_inputs / negative_preactivation)
 
         # insert the relevance messages into the relevance message matrix
         R_message_matrix[:, j] = R_messages_from_j
@@ -610,7 +615,7 @@ OUTPUT_NEURON_SELECTED = 1
 VECTOR_ADJUST_CONSTANT = 3
 
 X, y = create_data(params, 1)
-LRP(X, network, 0, params, rule="epsilon")
+LRP(X, network, 0, params, rule="alphabeta")
 
 # GRADIENTS
 plt.figure()
