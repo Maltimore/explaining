@@ -362,6 +362,9 @@ def LRP(X, network, output_neuron, params, rule="epsilon", epsilon=.01, alpha=0.
     # the first backpass is special so it can't be in the loop. Here we "compute" the
     # relevance in the last layer (set relevance to activation)
     R = np.array([activations[-1][output_neuron], ])
+    # extract the relevant row from the last weight matrix and save it into the
+    # list that holds all weight matrices
+    W_mats[-1] = W_mats[-1][[output_neuron]]
     # loop from end to beginning starting at the second last layer
     for idx in np.arange(len(activations)-2, -1, -1):
         if rule is "epsilon":
@@ -375,10 +378,10 @@ def LRP(X, network, output_neuron, params, rule="epsilon", epsilon=.01, alpha=0.
     return R
 
 
-def epsilon_rule(relevance_next_layer, W, b, activations_current_layer, epsilon):
+def epsilon_rule(R, W, b, activations_current_layer, epsilon):
     """epsilon_rule
 
-    :param relevance_next_layer: shape (n_neurons_next,)
+    :param R: shape (n_neurons_next,)
     :param W: weight matrix shape (n_neurons_next, n_neurons_current)
         weight matrix with the weights for a particular neuron in the next layer in one row
     :param b: bias vector for next layer of shape (n_neurons_next,)
@@ -386,7 +389,7 @@ def epsilon_rule(relevance_next_layer, W, b, activations_current_layer, epsilon)
     """
 
     # input checks
-    if not (len(relevance_next_layer.shape) == 1 and
+    if not (len(R.shape) == 1 and
             len(activations_current_layer.shape) == 1):
         raise ValueError("Relevances and activations must all have shape (n_neurons,)")
     if not len(W.shape) == 2:
@@ -402,9 +405,9 @@ def epsilon_rule(relevance_next_layer, W, b, activations_current_layer, epsilon)
 
         # compute the relevance messages that neuron j sends
         if z_j >= 0:
-            R_messages_from_j = inputs_to_j / (z_j + epsilon)
+            R_messages_from_j = inputs_to_j / (z_j + epsilon) * R[j]
         elif z_j < 0:
-            R_messages_from_j = inputs_to_j / (z_j - epsilon)
+            R_messages_from_j = inputs_to_j / (z_j - epsilon) * R[j]
 
         # insert the relevance messages into the relevance message matrix
         R_message_matrix[:, j] = R_messages_from_j
@@ -419,10 +422,10 @@ def epsilon_rule(relevance_next_layer, W, b, activations_current_layer, epsilon)
     return R_current
 
 
-def alphabeta_rule(relevance_next_layer, W, b, activations_current_layer, alpha):
+def alphabeta_rule(R, W, b, activations_current_layer, alpha):
     """alphabeta_rule
 
-    :param relevance_next_layer: shape (n_neurons_next,)
+    :param R: shape (n_neurons_next,)
     :param W: weight matrix shape (n_neurons_next, n_neurons_current)
     :param b: bias vector for next layer of shape (n_neurons_next,)
     :param activations_current_layer: shape (n_neurons_current,)
@@ -432,7 +435,7 @@ def alphabeta_rule(relevance_next_layer, W, b, activations_current_layer, alpha)
     beta = 1 - alpha
 
     # input checks
-    if not (len(relevance_next_layer.shape) == 1 and
+    if not (len(R.shape) == 1 and
             len(activations_current_layer.shape) == 1):
         raise ValueError("Relevances and activations must all have shape (n_neurons,)")
     if not len(W.shape) == 2:
@@ -444,10 +447,13 @@ def alphabeta_rule(relevance_next_layer, W, b, activations_current_layer, alpha)
     for j in range(R_message_matrix.shape[1]):
         # compute the inputs to j in the next layer and j's preactivation
         inputs_to_j = W[j] * activations_current_layer
-        import pdb; pdb.set_trace()
 
+        # get the indicies of the positive and negative inputs
+        positive_inputs = inputs_to_j >= 0
+        negative_inputs = ~positive_inputs
 
-        z_j = np.sum(inputs_to_j) + b[j]
+        positive_preactivation = np.sum(inputs_to_j[positive_inputs])
+        negative_preactivation = np.sum(inputs_to_j[negative_inputs])
 
         # compute the relevance messages that neuron j sends
         if z_j >= 0:
@@ -604,7 +610,7 @@ OUTPUT_NEURON_SELECTED = 1
 VECTOR_ADJUST_CONSTANT = 3
 
 X, y = create_data(params, 1)
-LRP(X, network, 0, params, rule="alphabeta")
+LRP(X, network, 0, params, rule="epsilon")
 
 # GRADIENTS
 plt.figure()
