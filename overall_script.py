@@ -702,11 +702,12 @@ relevance_mlp = LRP(X, mlp, OUTPUT_NEURON_SELECTED, mlp_params)
 # plot real pattern, input point, weights and haufe pattern for MLP
 W_mlp = W_mlp[..., OUTPUT_NEURON_SELECTED]
 A_haufe_mlp = A_haufe_mlp[..., OUTPUT_NEURON_SELECTED]
-fig, axes = plt.subplots(1, 4)
-plot_heatmap(A[:, 0].reshape((10, 10)), axis=axes[0], title="True A")
+fig, axes = plt.subplots(1, 5, figsize=(15, 5))
+plot_heatmap(A[:, 0].reshape((10, 10)), axis=axes[0], title="True pattern")
 plot_heatmap(X.reshape((10, 10)), axis=axes[1], title="input point")
-plot_heatmap(W_mlp.reshape((10, 10)), axis=axes[2], title="W")
-plot_heatmap(A_haufe_mlp.reshape((10, 10)), axis=axes[3], title="A Haufe 2013")
+plot_heatmap(W_mlp.reshape((10, 10)), axis=axes[2], title="gradient")
+plot_heatmap(A_haufe_mlp.reshape((10, 10)), axis=axes[3], title="pattern Haufe 2014")
+plot_heatmap(relevance_mlp.reshape((10, 10)), axis=axes[4], title="LRP")
 plt.suptitle("MLP", size=16)
 
 
@@ -717,11 +718,11 @@ A_haufe_cnn = get_patterns(W_cnn, Sigma_X, Sigma_s_inv)
 # plot real pattern, input point, weights and haufe pattern for CNN
 W_cnn = W_cnn[..., OUTPUT_NEURON_SELECTED]
 A_haufe_cnn = A_haufe_cnn[..., OUTPUT_NEURON_SELECTED]
-fig, axes = plt.subplots(1, 4)
-plot_heatmap(A[:, 0].reshape((10, 10)), axis=axes[0], title="True A")
+fig, axes = plt.subplots(1, 4, figsize=(15, 5))
+plot_heatmap(A[:, 0].reshape((10, 10)), axis=axes[0], title="True pattern")
 plot_heatmap(X.reshape((10, 10)), axis=axes[1], title="input point")
-plot_heatmap(W_cnn.reshape((10, 10)), axis=axes[2], title="W")
-plot_heatmap(A_haufe_cnn.reshape((10, 10)), axis=axes[3], title="A Haufe 2013")
+plot_heatmap(W_cnn.reshape((10, 10)), axis=axes[2], title="gradient")
+plot_heatmap(A_haufe_cnn.reshape((10, 10)), axis=axes[3], title="pattern Haufe 2014")
 plt.suptitle("CNN", size=16)
 
 #######
