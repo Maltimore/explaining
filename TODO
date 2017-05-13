@@ -1,9 +1,9 @@
 TODO
-refactor plot_w_or_patterns
 remove color bar from horeshoe plots
 check whether there is a difference between compute_relevance and gradient
 rename specific_dataclass
 
 DONE
+refactor plot_w_or_patterns
 rename params["get_output"] into params["output_func"]
 figure out the bias DONE

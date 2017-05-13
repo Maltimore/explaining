@@ -518,6 +518,13 @@ def get_gradients(X, params):
     return gradients
 
 
+def get_patterns(gradients, Sigma_X, Sigma_s_inv):
+    patterns = np.empty(gradients.shape)
+    for i in range(gradients.shape[0]):
+        patterns[i] = np.dot(np.dot(Sigma_X, gradients[i]), Sigma_s_inv)
+    return patterns
+
+
 def plot_background():
     """
     This function is for the ring data example only
@@ -562,71 +569,75 @@ def plot_background():
     plt.ylim(yy.min(), yy.max())
 
 
-def plot_w_or_patterns(what_to_plot):
+def create_2d_mesh(interval=0.2):
     # create a mesh to plot in
-    h = .2  # step size in the mesh
-    x_min, x_max = -2, 2 + h
-    y_min, y_max = -2, 2 + h
-    xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
-                         np.arange(y_min, y_max, h))
+    x_min, x_max = -2, 2 + interval
+    y_min, y_max = -2, 2 + interval
+    xx, yy = np.meshgrid(np.arange(x_min, x_max, interval),
+                         np.arange(y_min, y_max, interval))
     mesh = np.c_[xx.ravel(), yy.ravel()]
-
-    # get A via Haufe method
-    X_train, y_train = create_data(params, 5000)
-    y = one_hot_encoding(y_train, params["n_classes"])
-    Sigma_s = np.cov(y, rowvar=False)
-
-    # Sigma_s_inv = np.linalg.inv(np.cov(y.T))
-    Sigma_X = np.cov(X_train, rowvar=False)
-
-    # get all the gradients
-    gradients = get_gradients(mesh, params)
-
-    for idx in range(len(mesh)):
-        if idx % 100 == 0:
-            print("Computing weight vector nr " + str(idx) + " out of " + str(len(mesh)))
-        X_pos = mesh[[idx]]
-
-        if what_to_plot == "gradients":
-            plot_vector = gradients[idx, ..., OUTPUT_NEURON_SELECTED]
-            plot_vector /= np.linalg.norm(plot_vector) * VECTOR_ADJUST_CONSTANT
-        elif what_to_plot == "patterns":
-            # compute A from the Haufe paper.
-            # The columns of A are the activation patterns
-            A_haufe = np.dot(np.dot(Sigma_X, gradients[idx]), np.linalg.pinv(Sigma_s))
-            plot_vector = A_haufe[:, OUTPUT_NEURON_SELECTED]
-            plot_vector /= np.linalg.norm(plot_vector) * VECTOR_ADJUST_CONSTANT
-        else:
-            raise Exception("Choose gradients or patterns for what_to_plot")
-        plt.quiver(X_pos[0, 0], X_pos[0, 1], plot_vector[0], plot_vector[1], scale=None)
+    return mesh
 
 
-#######################################################################
-## RING DATA
-## train MLP on ring data
-#params["layer_sizes"] = [8, 8]
-#params["data"] = "ring"
-#params["model"] = "mlp"
-#params["n_classes"] = 2
-#params["network_input_shape"] = (-1, 2)
-#network, params = train_network(params)
-#OUTPUT_NEURON_SELECTED = 1
-#VECTOR_ADJUST_CONSTANT = 3
-#
-#X, y = create_data(params, 1)
+def normalize_arrows(arrows, length=0.3):
+    """normalize_arrows
+
+    :param arrows: array of shape (n_samples, 2)
+    :param length: scalar, desired Euclidean length of arrows
+    """
+    # normalize arrows to one using broadcasting (that's why we transpose twice)
+    arrows = (arrows.T / np.linalg.norm(arrows, axis=1)).T
+    # make all arrows length length
+    arrows *= length
+    return arrows
+
+
+######################################################################
+# RING DATA
+# train MLP on ring data
+params["layer_sizes"] = [8, 8]
+params["data"] = "ring"
+params["model"] = "custom"
+params["n_classes"] = 2
+params["network_input_shape"] = (-1, 2)
+network, params = train_network(params)
+OUTPUT_NEURON_SELECTED = 1
+VECTOR_ADJUST_CONSTANT = 3
+
+X, y = create_data(params, 5000)
 #LRP(X, network, 0, params, rule="alphabeta", alpha=2)
-#
-## GRADIENTS
-#plt.figure()
-#plot_background()
-#plot_w_or_patterns(what_to_plot="gradients")
-#plt.title("gradients")
-#
-## PATTERNS
-#plt.figure()
-#plot_background()
-#plot_w_or_patterns(what_to_plot="patterns")
-#plt.title("patterns")
+
+Sigma_X = np.cov(X, rowvar=False)
+Sigma_s = np.cov(one_hot_encoding(y, params["n_classes"]), rowvar=False)
+Sigma_s_inv = np.linalg.pinv(Sigma_s)
+
+mesh = create_2d_mesh()
+
+# GRADIENTS
+# get all the gradients (this will have the output neurons in the last dimension)
+# gradients has shape (n_samples, n_features, n_classes)
+gradients = get_gradients(mesh, params)
+# select gradients for only one output neuron and normalize their length
+gradients_plotting = normalize_arrows(gradients[..., OUTPUT_NEURON_SELECTED])
+
+plt.figure()
+plot_background()
+plt.quiver(mesh[:, 0], mesh[:, 1], gradients_plotting[:, 0], gradients_plotting[:, 1], scale=None)
+plt.title("gradients")
+
+
+# PATTERNS
+# compute A from the Haufe paper.
+# The columns of A are the activation patterns, i. e. A has shape (n_features, n_classes)
+#patterns = np.dot(np.dot(Sigma_X, gradients.T).T, np.linalg.pinv(Sigma_s))[..., OUTPUT_NEURON_SELECTED]
+patterns = get_patterns(gradients, Sigma_X, Sigma_s_inv)
+patterns_plotting = normalize_arrows(patterns[..., OUTPUT_NEURON_SELECTED])
+plt.figure()
+plot_background()
+plt.quiver(mesh[:, 0], mesh[:, 1], patterns_plotting[:, 0], patterns_plotting[:, 1], scale=None)
+plt.title("patterns")
+plt.show()
+import pdb; pdb.set_trace()
 
 ######################################################################
 # HORSESHOE DATA
