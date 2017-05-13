@@ -351,6 +351,8 @@ def LRP(X, network, output_neuron, params, rule="epsilon", epsilon=.01, alpha=0.
 
     W_mats, biases = get_network_parameters(network, params["bias_in_data"])
     activations = forward_pass(X, network, params["input_var"], params)
+    # reshape the input activations to be a shapeless vector
+    activations[0] = activations[0].reshape((-1,))
 
     # --- relevance backpropagation ---
     # the first backpass is special so it can't be in the loop. Here we "compute" the
@@ -695,10 +697,7 @@ A = get_horseshoe_pattern(params["horseshoe_distractors"])
 # MLP
 W_mlp = get_gradients(X, mlp_params)
 A_haufe_mlp = get_patterns(W_mlp, Sigma_X, Sigma_s_inv)
-
-# CNN
-W_cnn = get_gradients(X.reshape(cnn_params["network_input_shape"]), cnn_params)
-A_haufe_cnn = get_patterns(W_cnn, Sigma_X, Sigma_s_inv)
+relevance_mlp = LRP(X, mlp, OUTPUT_NEURON_SELECTED, mlp_params)
 
 # plot real pattern, input point, weights and haufe pattern for MLP
 W_mlp = W_mlp[..., OUTPUT_NEURON_SELECTED]
@@ -709,6 +708,11 @@ plot_heatmap(X.reshape((10, 10)), axis=axes[1], title="input point")
 plot_heatmap(W_mlp.reshape((10, 10)), axis=axes[2], title="W")
 plot_heatmap(A_haufe_mlp.reshape((10, 10)), axis=axes[3], title="A Haufe 2013")
 plt.suptitle("MLP", size=16)
+
+
+# CNN
+W_cnn = get_gradients(X.reshape(cnn_params["network_input_shape"]), cnn_params)
+A_haufe_cnn = get_patterns(W_cnn, Sigma_X, Sigma_s_inv)
 
 # plot real pattern, input point, weights and haufe pattern for CNN
 W_cnn = W_cnn[..., OUTPUT_NEURON_SELECTED]
