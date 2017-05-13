@@ -284,13 +284,13 @@ def get_target_title(target):
 
 
 def plot_heatmap(R_i, axis=None, title=""):
-    if axis == None:
+    if axis is None:
         fig, axis = plt.subplots(1, 1, figsize=(15, 10))
-
-    plot = axis.pcolor(R_i, cmap="viridis", vmin=-np.max(abs(R_i)), vmax=np.max(abs(R_i)))
+    axis.pcolor(R_i, cmap="viridis", vmin=-np.max(abs(R_i)), vmax=np.max(abs(R_i)))
     axis.set_title(title)
     axis.invert_yaxis()
-    plt.colorbar(plot, ax=axis)
+    axis.set_xticks([])
+    axis.set_yticks([])
 
 
 def forward_pass(X, network, input_var, params):

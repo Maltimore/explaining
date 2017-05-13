@@ -1,10 +1,10 @@
 TODO
 add LRP to horseshoe plots
-remove color bar from horseshoe plots
 check whether there is a difference between compute_relevance and gradient
 rename specific_dataclass
 
 DONE
+remove color bar from horseshoe plots
 refactor plot_w_or_patterns
 rename params["get_output"] into params["output_func"]
 figure out the bias DONE
