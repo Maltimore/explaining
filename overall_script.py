@@ -334,32 +334,6 @@ def get_network_parameters(network, bias_in_data):
         return W_mats, biases
 
 
-#def LRP_old(X, network, output_neuron, params, epsilon=.01):
-#    """
-#    OLD VERSION DO NOT USE (JUST FOR COMPARISON)
-#    """
-#
-#    W_mats, biases = get_network_parameters(network, params["bias_in_data"])
-#    activations = forward_pass(X, network, params["input_var"], params)
-#
-#    # --- manual forward propagation to compute preactivations ---
-#    preactivations = []
-#    for W, b, activation in zip(W_mats, biases, activations):
-#        preactivation = np.dot(W, activation) + np.expand_dims(b, 1)
-#        preactivations.append(preactivation)
-#
-#    # --- relevance backpropagation ---
-#    # the first backpass is special so it can't be in the loop
-#    R_over_z = activations[-1][output_neuron] / (preactivations[-1][output_neuron] + epsilon)
-#    R = np.multiply(W_mats[-1][output_neuron, :].T, activations[-2].T) * R_over_z
-#    for idx in np.arange(2, len(activations)):
-#        R_over_z = np.divide(R, preactivations[-idx].squeeze() + epsilon)
-#        Z_ij = np.multiply(W_mats[-idx], activations[-idx-1].T + epsilon)
-#        R = np.sum(np.multiply(Z_ij.T, R_over_z), axis=1)
-#    R = R.reshape((X.shape))
-#    return R
-
-
 def LRP(X, network, output_neuron, params, rule="epsilon", epsilon=.01, alpha=0.5):
     """LRP
     Compute the layerwise relevance propagation either with the epislon- or with the
@@ -367,7 +341,7 @@ def LRP(X, network, output_neuron, params, rule="epsilon", epsilon=.01, alpha=0.
 
     :param X: array, shape network_input_shape
     :param network: lasagne network
-    :param output_neuron: scalar, the output neuron with respect to which the 
+    :param output_neuron: scalar, the output neuron with respect to which the
         LRP is to be computed
     :param params: dict, parameter dictionary
     :param rule: string, either "epsilon" or "alphabeta"
@@ -586,16 +560,16 @@ def plot_background():
     class_1_mask = (y == 0).squeeze()
     class_2_mask = (y == 1).squeeze()
     for idx in range(500):
-        plt.plot(X[class_1_mask, 0][idx], X[class_1_mask,1][idx],
-                color="white",
-                marker="o",
-                fillstyle="full",
-                markeredgecolor="black")
-        plt.plot(X[class_2_mask, 0][idx], X[class_2_mask,1][idx],
-                color="black",
-                marker="o",
-                fillstyle="full",
-                markeredgecolor="black")
+        plt.plot(X[class_1_mask, 0][idx], X[class_1_mask, 1][idx],
+                 color="white",
+                 marker="o",
+                 fillstyle="full",
+                 markeredgecolor="black")
+        plt.plot(X[class_2_mask, 0][idx], X[class_2_mask, 1][idx],
+                 color="black",
+                 marker="o",
+                 fillstyle="full",
+                 markeredgecolor="black")
     plt.imshow(Z, interpolation="nearest", cmap=cm.gray, alpha=0.4,
                extent=[x_min, x_max, y_min, y_max])
     plt.xlim(xx.min(), xx.max())
