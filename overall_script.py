@@ -327,33 +327,46 @@ def get_network_parameters(network, bias_in_data):
         return W_mats, biases
 
 
-def LRP_old(X, network, output_neuron, params, epsilon=.01):
-    """
-    OLD VERSION DO NOT USE (JUST FOR COMPARISON)
-    """
-
-    W_mats, biases = get_network_parameters(network, params["bias_in_data"])
-    activations = forward_pass(X, network, params["input_var"], params)
-
-    # --- manual forward propagation to compute preactivations ---
-    preactivations = []
-    for W, b, activation in zip(W_mats, biases, activations):
-        preactivation = np.dot(W, activation) + np.expand_dims(b, 1)
-        preactivations.append(preactivation)
-
-    # --- relevance backpropagation ---
-    # the first backpass is special so it can't be in the loop
-    R_over_z = activations[-1][output_neuron] / (preactivations[-1][output_neuron] + epsilon)
-    R = np.multiply(W_mats[-1][output_neuron, :].T, activations[-2].T) * R_over_z
-    for idx in np.arange(2, len(activations)):
-        R_over_z = np.divide(R, preactivations[-idx].squeeze() + epsilon)
-        Z_ij = np.multiply(W_mats[-idx], activations[-idx-1].T + epsilon)
-        R = np.sum(np.multiply(Z_ij.T, R_over_z), axis=1)
-    R = R.reshape((X.shape))
-    return R
+#def LRP_old(X, network, output_neuron, params, epsilon=.01):
+#    """
+#    OLD VERSION DO NOT USE (JUST FOR COMPARISON)
+#    """
+#
+#    W_mats, biases = get_network_parameters(network, params["bias_in_data"])
+#    activations = forward_pass(X, network, params["input_var"], params)
+#
+#    # --- manual forward propagation to compute preactivations ---
+#    preactivations = []
+#    for W, b, activation in zip(W_mats, biases, activations):
+#        preactivation = np.dot(W, activation) + np.expand_dims(b, 1)
+#        preactivations.append(preactivation)
+#
+#    # --- relevance backpropagation ---
+#    # the first backpass is special so it can't be in the loop
+#    R_over_z = activations[-1][output_neuron] / (preactivations[-1][output_neuron] + epsilon)
+#    R = np.multiply(W_mats[-1][output_neuron, :].T, activations[-2].T) * R_over_z
+#    for idx in np.arange(2, len(activations)):
+#        R_over_z = np.divide(R, preactivations[-idx].squeeze() + epsilon)
+#        Z_ij = np.multiply(W_mats[-idx], activations[-idx-1].T + epsilon)
+#        R = np.sum(np.multiply(Z_ij.T, R_over_z), axis=1)
+#    R = R.reshape((X.shape))
+#    return R
 
 
 def LRP(X, network, output_neuron, params, rule="epsilon", epsilon=.01, alpha=0.5):
+    """LRP
+    Compute the layerwise relevance propagation either with the epislon- or with the
+    alphabeta rule
+
+    :param X: array, shape network_input_shape
+    :param network: lasagne network
+    :param output_neuron: scalar, the output neuron with respect to which the 
+        LRP is to be computed
+    :param params: dict, parameter dictionary
+    :param rule: string, either "epsilon" or "alphabeta"
+    :param epsilon: scalar, epsilon parameter for epsilon rule
+    :param alpha: scalar, alpha parameter for alphabeta rule (beta is inferred)
+    """
 
     W_mats, biases = get_network_parameters(network, params["bias_in_data"])
     activations = forward_pass(X, network, params["input_var"], params)
@@ -515,10 +528,23 @@ def get_gradients(X, params):
                 [params["input_var"]], gradient_var, allow_input_downcast=True)
         for sample_idx in range(X.shape[0]):
             gradients[sample_idx, ..., output_idx] = compute_grad(X[[sample_idx]])
+    gradients.reshape(X.shape + (-1,))
     return gradients
 
 
 def get_patterns(gradients, Sigma_X, Sigma_s_inv):
+    """get_patterns
+    Compute the Patterns according to Haufe 2015 given the gradients
+
+    :param gradients: array, shape (n_samples, [...,] feature dimensions, n_classes)
+    :param Sigma_X: array, shape (n_features, n_features)
+        Covariance matrix of the input
+    :param Sigma_s_inv: array, shape (n_classes, n_classes)
+        Covariance matrix of the classes
+
+    :returns: patterns, array of shape gradients.shape
+    """
+    gradients = gradients.reshape((gradients.shape[0], -1, gradients.shape[-1]))
     patterns = np.empty(gradients.shape)
     for i in range(gradients.shape[0]):
         patterns[i] = np.dot(np.dot(Sigma_X, gradients[i]), Sigma_s_inv)
@@ -660,10 +686,13 @@ cnn_prediction_func = cnn_params["prediction_func"]
 # some more data
 X, y = create_data(params, 500)
 
+Sigma_X = np.cov(X, rowvar=False)
+Sigma_s = np.cov(one_hot_encoding(y, params["n_classes"]), rowvar=False)
+Sigma_s_inv = np.linalg.pinv(Sigma_s)
+
 # predict with mlp
 mlp_prediction = mlp_prediction_func(X)
 mlp_score = compute_accuracy(y, mlp_prediction)
-
 
 # predict with cnn
 cnn_prediction = cnn_prediction_func(X.reshape(params["network_input_shape"]))
@@ -680,22 +709,6 @@ print("CNN score: " + str(cnn_score))
 
 ############
 # GRADIENTS
-# computing the gradient of the inputs of the MLP
-mlp_gradient = T.grad(mlp_params["output_var"][0, OUTPUT_NEURON_SELECTED], mlp_params["input_var"])
-compute_grad_mlp = theano.function(
-        [mlp_params["input_var"]], mlp_gradient, allow_input_downcast=True)
-mlp_gradient = compute_grad_mlp(X[[0]])
-# normalize the gradient
-mlp_gradient /= np.linalg.norm(mlp_gradient)
-
-# computing the gradient of the inputs of the CNN
-cnn_gradient = T.grad(cnn_params["output_var"][0, OUTPUT_NEURON_SELECTED], cnn_params["input_var"])
-compute_grad_cnn = theano.function(
-        [cnn_params["input_var"]], cnn_gradient, allow_input_downcast=True)
-cnn_gradient = compute_grad_cnn(X.reshape(cnn_params["network_input_shape"])[[0]])
-cnn_gradient = cnn_gradient.reshape((1, 100))
-# normalize the gradient
-cnn_gradient /= np.linalg.norm(cnn_gradient)
 
 ######
 # get an input point for which we want the weights / patterns
@@ -703,21 +716,20 @@ params["specific_dataclass"] = 0
 X, y = create_data(params, 1)
 # get A via Haufe method
 params["specific_dataclass"] = None
-X_train, y_train = create_data(params, 500)
 A = get_horseshoe_pattern(params["horseshoe_distractors"])
-y = one_hot_encoding(y_train, params["n_classes"])
-Sigma_s = np.cov(y.T)
-Sigma_X = np.cov(X_train.T)
 
 # MLP
-W_mlp = get_gradients(X, mlp_params)[0]
-A_haufe_mlp = np.dot(np.dot(Sigma_X, W_mlp), Sigma_s)
+W_mlp = get_gradients(X, mlp_params)
+A_haufe_mlp = get_patterns(W_mlp, Sigma_X, Sigma_s_inv)
+W_mlp = W_mlp[0]
+#A_haufe_mlp = np.dot(np.dot(Sigma_X, W_mlp), Sigma_s)
 
 # CNN
 W_cnn = get_gradients(X.reshape(cnn_params["network_input_shape"]), cnn_params)
+A_haufe_cnn = get_patterns(W_cnn, Sigma_X, Sigma_s_inv)
 W_cnn = W_cnn.reshape(
         (np.prod(cnn_params["network_input_shape"][1:]), cnn_params["n_classes"]))
-A_haufe_cnn = np.dot(np.dot(Sigma_X, W_cnn), Sigma_s)
+#A_haufe_cnn = np.dot(np.dot(Sigma_X, W_cnn), Sigma_s)
 
 # plot real pattern, input point, weights and haufe pattern for MLP
 grad_mlp = W_mlp[:, 0]
