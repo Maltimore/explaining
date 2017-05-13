@@ -284,6 +284,12 @@ def get_target_title(target):
 
 
 def plot_heatmap(R_i, axis=None, title=""):
+    """plot_heatmap
+
+    :param R_i: array, shape (width, height)
+    :param axis: matplotlib subplot axis object
+    :param title: string, title of plot
+    """
     if axis is None:
         fig, axis = plt.subplots(1, 1, figsize=(15, 10))
     axis.pcolor(R_i, cmap="viridis", vmin=-np.max(abs(R_i)), vmax=np.max(abs(R_i)))
@@ -298,9 +304,10 @@ def forward_pass(X, network, input_var, params):
     IMPORTANT: THIS FUNCTION CAN ONLY BE CALLED WITH A SINGLE INPUT SAMPLE
     the function expects a row vector
     """
-    get_activations = theano.function([input_var],
-                lasagne.layers.get_output(lasagne.layers.get_all_layers(network)), 
-                allow_input_downcast=True)
+    get_activations = theano.function(
+        [input_var],
+        lasagne.layers.get_output(lasagne.layers.get_all_layers(network)),
+        allow_input_downcast=True)
     activations = get_activations(X)
     for i in range(len(activations)):
         activations[i] = activations[i].squeeze()
