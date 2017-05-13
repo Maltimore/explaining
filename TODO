@@ -1,4 +1,5 @@
 TODO
+make LRP accept several samples
 add LRP to horseshoe plots
 check whether there is a difference between compute_relevance and gradient
 rename specific_dataclass
