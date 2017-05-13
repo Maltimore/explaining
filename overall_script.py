@@ -618,52 +618,52 @@ def normalize_arrows(arrows, length=0.3):
     return arrows
 
 
-######################################################################
-# RING DATA
-# train MLP on ring data
-params["layer_sizes"] = [8, 8]
-params["data"] = "ring"
-params["model"] = "custom"
-params["n_classes"] = 2
-params["network_input_shape"] = (-1, 2)
-network, params = train_network(params)
-OUTPUT_NEURON_SELECTED = 1
-VECTOR_ADJUST_CONSTANT = 3
-
-X, y = create_data(params, 5000)
-#LRP(X, network, 0, params, rule="alphabeta", alpha=2)
-
-Sigma_X = np.cov(X, rowvar=False)
-Sigma_s = np.cov(one_hot_encoding(y, params["n_classes"]), rowvar=False)
-Sigma_s_inv = np.linalg.pinv(Sigma_s)
-
-mesh = create_2d_mesh()
-
-# GRADIENTS
-# get all the gradients (this will have the output neurons in the last dimension)
-# gradients has shape (n_samples, n_features, n_classes)
-gradients = get_gradients(mesh, params)
-# select gradients for only one output neuron and normalize their length
-gradients_plotting = normalize_arrows(gradients[..., OUTPUT_NEURON_SELECTED])
-
-plt.figure()
-plot_background()
-plt.quiver(mesh[:, 0], mesh[:, 1], gradients_plotting[:, 0], gradients_plotting[:, 1], scale=None)
-plt.title("gradients")
-
-
-# PATTERNS
-# compute A from the Haufe paper.
-# The columns of A are the activation patterns, i. e. A has shape (n_features, n_classes)
-#patterns = np.dot(np.dot(Sigma_X, gradients.T).T, np.linalg.pinv(Sigma_s))[..., OUTPUT_NEURON_SELECTED]
-patterns = get_patterns(gradients, Sigma_X, Sigma_s_inv)
-patterns_plotting = normalize_arrows(patterns[..., OUTPUT_NEURON_SELECTED])
-plt.figure()
-plot_background()
-plt.quiver(mesh[:, 0], mesh[:, 1], patterns_plotting[:, 0], patterns_plotting[:, 1], scale=None)
-plt.title("patterns")
-plt.show()
-import pdb; pdb.set_trace()
+#######################################################################
+## RING DATA
+## train MLP on ring data
+#params["layer_sizes"] = [8, 8]
+#params["data"] = "ring"
+#params["model"] = "custom"
+#params["n_classes"] = 2
+#params["network_input_shape"] = (-1, 2)
+#network, params = train_network(params)
+#OUTPUT_NEURON_SELECTED = 1
+#VECTOR_ADJUST_CONSTANT = 3
+#
+#X, y = create_data(params, 5000)
+##LRP(X, network, 0, params, rule="alphabeta", alpha=2)
+#
+#Sigma_X = np.cov(X, rowvar=False)
+#Sigma_s = np.cov(one_hot_encoding(y, params["n_classes"]), rowvar=False)
+#Sigma_s_inv = np.linalg.pinv(Sigma_s)
+#
+#mesh = create_2d_mesh()
+#
+## GRADIENTS
+## get all the gradients (this will have the output neurons in the last dimension)
+## gradients has shape (n_samples, n_features, n_classes)
+#gradients = get_gradients(mesh, params)
+## select gradients for only one output neuron and normalize their length
+#gradients_plotting = normalize_arrows(gradients[..., OUTPUT_NEURON_SELECTED])
+#
+#plt.figure()
+#plot_background()
+#plt.quiver(mesh[:, 0], mesh[:, 1], gradients_plotting[:, 0], gradients_plotting[:, 1], scale=None)
+#plt.title("gradients")
+#
+#
+## PATTERNS
+## compute A from the Haufe paper.
+## The columns of A are the activation patterns, i. e. A has shape (n_features, n_classes)
+##patterns = np.dot(np.dot(Sigma_X, gradients.T).T, np.linalg.pinv(Sigma_s))[..., OUTPUT_NEURON_SELECTED]
+#patterns = get_patterns(gradients, Sigma_X, Sigma_s_inv)
+#patterns_plotting = normalize_arrows(patterns[..., OUTPUT_NEURON_SELECTED])
+#plt.figure()
+#plot_background()
+#plt.quiver(mesh[:, 0], mesh[:, 1], patterns_plotting[:, 0], patterns_plotting[:, 1], scale=None)
+#plt.title("patterns")
+#plt.show()
+#import pdb; pdb.set_trace()
 
 ######################################################################
 # HORSESHOE DATA
@@ -698,14 +698,8 @@ mlp_score = compute_accuracy(y, mlp_prediction)
 cnn_prediction = cnn_prediction_func(X.reshape(params["network_input_shape"]))
 cnn_score = compute_accuracy(y, cnn_prediction)
 
-# manually predict
-#man_prediction = manual_classification(X[:, 0, :, :])
-#man_score = compute_accuracy(y, man_prediction)
-
-
 print("MLP score: " + str(mlp_score))
 print("CNN score: " + str(cnn_score))
-#print("manual score: " + str(man_score))
 
 ############
 # GRADIENTS
@@ -714,39 +708,35 @@ print("CNN score: " + str(cnn_score))
 # get an input point for which we want the weights / patterns
 params["specific_dataclass"] = 0
 X, y = create_data(params, 1)
-# get A via Haufe method
 params["specific_dataclass"] = None
 A = get_horseshoe_pattern(params["horseshoe_distractors"])
 
 # MLP
 W_mlp = get_gradients(X, mlp_params)
 A_haufe_mlp = get_patterns(W_mlp, Sigma_X, Sigma_s_inv)
-W_mlp = W_mlp[0]
-#A_haufe_mlp = np.dot(np.dot(Sigma_X, W_mlp), Sigma_s)
 
 # CNN
 W_cnn = get_gradients(X.reshape(cnn_params["network_input_shape"]), cnn_params)
 A_haufe_cnn = get_patterns(W_cnn, Sigma_X, Sigma_s_inv)
-W_cnn = W_cnn.reshape(
-        (np.prod(cnn_params["network_input_shape"][1:]), cnn_params["n_classes"]))
-#A_haufe_cnn = np.dot(np.dot(Sigma_X, W_cnn), Sigma_s)
 
 # plot real pattern, input point, weights and haufe pattern for MLP
-grad_mlp = W_mlp[:, 0]
+W_mlp = W_mlp[..., OUTPUT_NEURON_SELECTED]
+A_haufe_mlp = A_haufe_mlp[..., OUTPUT_NEURON_SELECTED]
 fig, axes = plt.subplots(1, 4)
 plot_heatmap(A[:, 0].reshape((10, 10)), axis=axes[0], title="True A")
 plot_heatmap(X.reshape((10, 10)), axis=axes[1], title="input point")
-plot_heatmap(grad_mlp.reshape((10, 10)), axis=axes[2], title="W")
-plot_heatmap(A_haufe_mlp[:, 0].reshape((10, 10)), axis=axes[3], title="A Haufe 2013")
+plot_heatmap(W_mlp.reshape((10, 10)), axis=axes[2], title="W")
+plot_heatmap(A_haufe_mlp.reshape((10, 10)), axis=axes[3], title="A Haufe 2013")
 plt.suptitle("MLP", size=16)
 
 # plot real pattern, input point, weights and haufe pattern for CNN
-grad_cnn = W_cnn[:, 0]
+W_cnn = W_cnn[..., OUTPUT_NEURON_SELECTED]
+A_haufe_cnn = A_haufe_cnn[..., OUTPUT_NEURON_SELECTED]
 fig, axes = plt.subplots(1, 4)
 plot_heatmap(A[:, 0].reshape((10, 10)), axis=axes[0], title="True A")
 plot_heatmap(X.reshape((10, 10)), axis=axes[1], title="input point")
-plot_heatmap(grad_cnn.reshape((10, 10)), axis=axes[2], title="W")
-plot_heatmap(A_haufe_cnn[:, 0].reshape((10, 10)), axis=axes[3], title="A Haufe 2013")
+plot_heatmap(W_cnn.reshape((10, 10)), axis=axes[2], title="W")
+plot_heatmap(A_haufe_cnn.reshape((10, 10)), axis=axes[3], title="A Haufe 2013")
 plt.suptitle("CNN", size=16)
 
 #######

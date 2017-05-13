@@ -1,5 +1,5 @@
 TODO
-remove color bar from horeshoe plots
+remove color bar from horseshoe plots
 check whether there is a difference between compute_relevance and gradient
 rename specific_dataclass
 
