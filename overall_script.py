@@ -527,10 +527,10 @@ def get_patterns(gradients, Sigma_X, Sigma_s_inv):
 
     :returns: patterns, array of shape gradients.shape
     """
+    orig_shape = gradients.shape
     gradients = gradients.reshape((gradients.shape[0], -1, gradients.shape[-1]))
-    patterns = np.empty(gradients.shape)
-    for i in range(gradients.shape[0]):
-        patterns[i] = np.dot(np.dot(Sigma_X, gradients[i]), Sigma_s_inv)
+    patterns = np.einsum('jk,ikl->ijl', Sigma_X, gradients)
+    patterns = patterns.reshape(orig_shape)
     return patterns
 
 
@@ -539,7 +539,7 @@ def plot_background():
     This function is for the ring data example only
     """
     # create some data for scatterplot
-    X, y = create_ring_data(params, params["N_train"])
+    X, y = create_ring_data(params, 2000)
     permutation = np.random.permutation(X.shape[0])
     X = X[permutation]
     y = y[permutation]
@@ -561,7 +561,7 @@ def plot_background():
     # marker="o"), we have to loop here.
     class_1_mask = (y == 0).squeeze()
     class_2_mask = (y == 1).squeeze()
-    for idx in range(500):
+    for idx in range(X[:500].shape[0]):
         plt.plot(X[class_1_mask, 0][idx], X[class_1_mask, 1][idx],
                  color="white",
                  marker="o",
@@ -601,52 +601,50 @@ def normalize_arrows(arrows, length=0.3):
     return arrows
 
 
-#######################################################################
-## RING DATA
-## train MLP on ring data
-#params["layer_sizes"] = [8, 8]
-#params["data"] = "ring"
-#params["model"] = "custom"
-#params["n_classes"] = 2
-#params["network_input_shape"] = (-1, 2)
-#network, params = train_network(params)
-#OUTPUT_NEURON_SELECTED = 1
-#VECTOR_ADJUST_CONSTANT = 3
-#
-#X, y = create_data(params, 5000)
-##LRP(X, network, 0, params, rule="alphabeta", alpha=2)
-#
-#Sigma_X = np.cov(X, rowvar=False)
-#Sigma_s = np.cov(one_hot_encoding(y, params["n_classes"]), rowvar=False)
-#Sigma_s_inv = np.linalg.pinv(Sigma_s)
-#
-#mesh = create_2d_mesh()
-#
-## GRADIENTS
-## get all the gradients (this will have the output neurons in the last dimension)
-## gradients has shape (n_samples, n_features, n_classes)
-#gradients = get_gradients(mesh, params)
-## select gradients for only one output neuron and normalize their length
-#gradients_plotting = normalize_arrows(gradients[..., OUTPUT_NEURON_SELECTED])
-#
-#plt.figure()
-#plot_background()
-#plt.quiver(mesh[:, 0], mesh[:, 1], gradients_plotting[:, 0], gradients_plotting[:, 1], scale=None)
-#plt.title("gradients")
-#
-#
-## PATTERNS
-## compute A from the Haufe paper.
-## The columns of A are the activation patterns, i. e. A has shape (n_features, n_classes)
-##patterns = np.dot(np.dot(Sigma_X, gradients.T).T, np.linalg.pinv(Sigma_s))[..., OUTPUT_NEURON_SELECTED]
-#patterns = get_patterns(gradients, Sigma_X, Sigma_s_inv)
-#patterns_plotting = normalize_arrows(patterns[..., OUTPUT_NEURON_SELECTED])
-#plt.figure()
-#plot_background()
-#plt.quiver(mesh[:, 0], mesh[:, 1], patterns_plotting[:, 0], patterns_plotting[:, 1], scale=None)
-#plt.title("patterns")
-#plt.show()
-#import pdb; pdb.set_trace()
+######################################################################
+# RING DATA
+# train MLP on ring data
+params["layer_sizes"] = [8, 8]
+params["data"] = "ring"
+params["model"] = "custom"
+params["n_classes"] = 2
+params["network_input_shape"] = (-1, 2)
+network, params = train_network(params)
+OUTPUT_NEURON_SELECTED = 1
+VECTOR_ADJUST_CONSTANT = 3
+
+X, y = create_data(params, 5000)
+#LRP(X, network, 0, params, rule="alphabeta", alpha=2)
+
+Sigma_X = np.cov(X, rowvar=False)
+Sigma_s = np.cov(one_hot_encoding(y, params["n_classes"]), rowvar=False)
+Sigma_s_inv = np.linalg.pinv(Sigma_s)
+
+mesh = create_2d_mesh()
+
+# GRADIENTS
+# get all the gradients (this will have the output neurons in the last dimension)
+# gradients has shape (n_samples, n_features, n_classes)
+gradients = get_gradients(mesh, params)
+# select gradients for only one output neuron and normalize their length
+gradients_plotting = normalize_arrows(gradients[..., OUTPUT_NEURON_SELECTED])
+
+plt.figure()
+plot_background()
+plt.quiver(mesh[:, 0], mesh[:, 1], gradients_plotting[:, 0], gradients_plotting[:, 1], scale=None)
+plt.title("gradients")
+
+
+# PATTERNS
+# compute A from the Haufe paper.
+# The columns of A are the activation patterns, i. e. A has shape (n_features, n_classes)
+patterns = get_patterns(gradients, Sigma_X, Sigma_s_inv)
+patterns_plotting = normalize_arrows(patterns[..., OUTPUT_NEURON_SELECTED])
+plt.figure()
+plot_background()
+plt.quiver(mesh[:, 0], mesh[:, 1], patterns_plotting[:, 0], patterns_plotting[:, 1], scale=None)
+plt.title("patterns")
+plt.show()
 
 ######################################################################
 # HORSESHOE DATA
@@ -665,7 +663,7 @@ params["epochs"] = 1
 cnn, cnn_params = train_network(params.copy())
 cnn_prediction_func = cnn_params["prediction_func"]
 
-# ### compare prediction scores ###
+##### compare prediction scores ###
 # some more data
 X, y = create_data(params, 500)
 
@@ -697,7 +695,7 @@ A = get_horseshoe_pattern(params["horseshoe_distractors"])
 # MLP
 W_mlp = get_gradients(X, mlp_params)
 A_haufe_mlp = get_patterns(W_mlp, Sigma_X, Sigma_s_inv)
-relevance_mlp = LRP(X, mlp, OUTPUT_NEURON_SELECTED, mlp_params)
+relevance_mlp = LRP(X, mlp, OUTPUT_NEURON_SELECTED, mlp_params, epsilon=0.00001)
 
 # plot real pattern, input point, weights and haufe pattern for MLP
 W_mlp = W_mlp[..., OUTPUT_NEURON_SELECTED]
@@ -714,6 +712,7 @@ plt.suptitle("MLP", size=16)
 # CNN
 W_cnn = get_gradients(X.reshape(cnn_params["network_input_shape"]), cnn_params)
 A_haufe_cnn = get_patterns(W_cnn, Sigma_X, Sigma_s_inv)
+#relevance_cnn = LRP(X, cnn, OUTPUT_NEURON_SELECTED, cnn_params)
 
 # plot real pattern, input point, weights and haufe pattern for CNN
 W_cnn = W_cnn[..., OUTPUT_NEURON_SELECTED]

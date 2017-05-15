@@ -24,7 +24,7 @@ def get_CLI_parameters(argv):
     parser.add_argument("-n", "--name", default="default")
 
     params = vars(parser.parse_args(argv[1:]))
-    params["N_train"] = 5000
+    params["N_train"] = 500
     params["N_val"] = 300
     params["N_test"] = 300
     params["minibatch_size"] = 30
