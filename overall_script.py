@@ -572,7 +572,7 @@ def get_patterns(X, network, output_neuron, params, Sigma_X, Sigma_s_inv):
     W = np.empty((X.shape[0], Sigma_X.shape[0], Sigma_s_inv.shape[0]))
     for class_idx in range(Sigma_s_inv.shape[0]):
         W[..., class_idx] = get_gradients(X, network, class_idx, params).reshape((X.shape[0], Sigma_X.shape[0]))
-    patterns = np.einsum('jk,ikl->ijl', Sigma_X, W)[..., output_neuron]
+    patterns = np.einsum('jk,ikl,lm->ijm', Sigma_X, W, Sigma_s_inv)[..., output_neuron]
     patterns = patterns.reshape(X.shape)
     return patterns
 
