@@ -385,6 +385,26 @@ def LRP(X, network, output_neuron, params, rule="epsilon", epsilon=.01, alpha=0.
     return R
 
 
+def easyLRP(X, network, output_neuron, params, rule="epsilon", epsilon=.01, alpha=0.5):
+    """easyLRP
+    Compute the layerwise relevance propagation either with the epislon- or with the
+    alphabeta rule
+
+    :param X: array, shape network_input_shape
+    :param network: lasagne network
+    :param output_neuron: scalar, the output neuron with respect to which the
+        LRP is to be computed
+    :param params: dict, parameter dictionary
+    :param rule: string, either "epsilon" or "alphabeta"
+    :param epsilon: scalar, epsilon parameter for epsilon rule
+    :param alpha: scalar, alpha parameter for alphabeta rule (beta is inferred)
+    """
+    # get all gradients and select the gradients with respect to the output_neuron desired
+    gradients = get_gradients(X, params)
+    relevance = gradients * X[..., np.newaxis]
+    return relevance
+
+
 def epsilon_rule(R, W, b, activations_current_layer, epsilon):
     """epsilon_rule
 
@@ -657,8 +677,7 @@ plt.quiver(mesh[:, 0], mesh[:, 1], patterns_plotting[:, 0], patterns_plotting[:,
 plt.title("patterns")
 
 # RELEVANCE
-import pdb; pdb.set_trace()
-relevance = LRP(X, network, OUTPUT_NEURON_SELECTED, params, rule="alphabeta", alpha=2)
+relevance = easyLRP(mesh, network, OUTPUT_NEURON_SELECTED, params, rule="alphabeta", alpha=2)
 relevance_plotting = normalize_arrows(relevance[..., OUTPUT_NEURON_SELECTED])
 plt.figure()
 plot_background(params)

@@ -1,8 +1,9 @@
 TODO
 remove softmax layer before analysing
 implement "easy" LRP rule by multiplying input with gradient
+compare easy LRP and traditional LRP
 make LRP accept several samples
-check whether there is a difference between compute_relevance and gradient
+
 rename specific_dataclass
 
 DONE
