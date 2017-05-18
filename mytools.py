@@ -25,8 +25,8 @@ def get_CLI_parameters(argv):
 
     params = vars(parser.parse_args(argv[1:]))
     params["N_train"] = 5000
-    params["N_val"] = 300
-    params["N_test"] = 300
+    params["N_val"] = 1000
+    params["N_test"] = 1000
     params["minibatch_size"] = 30
     params["horseshoe_distractors"] = True
     params["specific_dataclass"] = None
