@@ -142,7 +142,7 @@ def create_ring_data(params, N):
     """
     Creates 2d data aligned in clusters aligned on a ring
     """
-    n_centers = 7
+    n_centers = 8
     n_per_center = int(np.ceil(N / n_centers))
     C = .02*np.eye(2)
     radius = 1
@@ -338,8 +338,6 @@ def get_network_parameters(network, bias_in_data):
 
     for idx in range(len(W_mats)):
         W_mats[idx] = W_mats[idx].T
-        if not bias_in_data:
-            biases[idx] = biases[idx]
 
     if bias_in_data:
         return W_mats
@@ -617,9 +615,9 @@ def normalize_arrows(arrows, length=0.3):
 ######################################################################
 # RING DATA
 # train MLP on ring data
-params["layer_sizes"] = [8, 8, 8]
+params["layer_sizes"] = [8]
 params["data"] = "ring"
-params["model"] = "mlp"
+params["model"] = "custom"
 params["n_classes"] = 2
 params["network_input_shape"] = (-1, 2)
 params["epochs"] = 30
@@ -628,7 +626,6 @@ OUTPUT_NEURON_SELECTED = 0
 VECTOR_ADJUST_CONSTANT = 3
 
 X, y = create_data(params, 5000)
-#LRP(X, network, 0, params, rule="alphabeta", alpha=2)
 
 Sigma_X = np.cov(X, rowvar=False)
 Sigma_s = np.cov(one_hot_encoding(y, params["n_classes"]), rowvar=False)
@@ -658,6 +655,15 @@ plt.figure()
 plot_background(params)
 plt.quiver(mesh[:, 0], mesh[:, 1], patterns_plotting[:, 0], patterns_plotting[:, 1], scale=None)
 plt.title("patterns")
+
+# RELEVANCE
+import pdb; pdb.set_trace()
+relevance = LRP(X, network, OUTPUT_NEURON_SELECTED, params, rule="alphabeta", alpha=2)
+relevance_plotting = normalize_arrows(relevance[..., OUTPUT_NEURON_SELECTED])
+plt.figure()
+plot_background(params)
+plt.quiver(mesh[:, 0], mesh[:, 1], relevance_plotting[:, 0], relevance_plotting[:, 1], scale=None)
+plt.title("relevance")
 plt.show()
 
 #######################################################################
