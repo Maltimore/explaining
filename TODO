@@ -1,13 +1,12 @@
 TODO
-fix pattern computation (multiply by Sigma_s_inv)
-remove softmax layer before analysing
-implement "easy" LRP rule by multiplying input with gradient
 compare easy LRP and traditional LRP
-make LRP accept several samples
-
 rename specific_dataclass
 
 DONE
+make LRP accept several samples
+fix pattern computation (multiply by Sigma_s_inv)
+remove softmax layer before analysing
+implement "easy" LRP rule by multiplying input with gradient
 add LRP to horseshoe plots
 remove color bar from horseshoe plots
 refactor plot_w_or_patterns
