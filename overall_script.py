@@ -405,8 +405,8 @@ def easyLRP(X, network, output_neuron, params, rule="epsilon", epsilon=.01, alph
     :returns: relevance, array of shape X.shape + (n_classes,)
     """
     # get all gradients and select the gradients with respect to the output_neuron desired
-    gradients = get_gradients(X, network, params)
-    relevance = gradients * X[..., np.newaxis]
+    gradients = get_gradients(X, network, output_neuron, params)
+    relevance = gradients * X
     return relevance
 
 
@@ -528,7 +528,7 @@ def compute_accuracy(y, y_hat):
     return p_correct
 
 
-def get_gradients(X, network, params):
+def get_gradients(X, network, output_neuron, params):
     """get_gradients
 
     :param X: array, shape network_input_shape
@@ -544,13 +544,12 @@ def get_gradients(X, network, params):
         network.nonlinearity = lambda x: x
         replaced_nonlinearity = True
 
-    gradients = np.empty(X.shape + (params["n_classes"],))
-    for output_idx in range(params["n_classes"]):
-        gradient_var = T.grad(params["output_var"][0, output_idx], params["input_var"])
-        compute_grad = theano.function(
+    gradients = np.empty(X.shape)
+    gradient_var = T.grad(params["output_var"][0, output_neuron], params["input_var"])
+    compute_grad = theano.function(
             [params["input_var"]], gradient_var, allow_input_downcast=True)
-        for sample_idx in range(X.shape[0]):
-            gradients[sample_idx, ..., output_idx] = compute_grad(X[[sample_idx]])
+    for sample_idx in range(X.shape[0]):
+        gradients[[sample_idx]] = compute_grad(X[[sample_idx]])
     gradients.reshape(X.shape + (-1,))
 
     if replaced_nonlinearity:
@@ -558,7 +557,7 @@ def get_gradients(X, network, params):
     return gradients
 
 
-def get_patterns(gradients, Sigma_X, Sigma_s_inv):
+def get_patterns(X, network, output_neuron, params, Sigma_X, Sigma_s_inv):
     """get_patterns
     Compute the Patterns according to Haufe 2015 given the gradients
 
@@ -570,10 +569,11 @@ def get_patterns(gradients, Sigma_X, Sigma_s_inv):
 
     :returns: patterns, array of shape gradients.shape
     """
-    orig_shape = gradients.shape
-    gradients = gradients.reshape((gradients.shape[0], -1, gradients.shape[-1]))
-    patterns = np.einsum('jk,ikl->ijl', Sigma_X, gradients)
-    patterns = patterns.reshape(orig_shape)
+    W = np.empty((X.shape[0], Sigma_X.shape[0], Sigma_s_inv.shape[0]))
+    for class_idx in range(Sigma_s_inv.shape[0]):
+        W[..., class_idx] = get_gradients(X, network, class_idx, params).reshape((X.shape[0], Sigma_X.shape[0]))
+    patterns = np.einsum('jk,ikl->ijl', Sigma_X, W)[..., output_neuron]
+    patterns = patterns.reshape(X.shape)
     return patterns
 
 
@@ -668,9 +668,9 @@ mesh = create_2d_mesh()
 # GRADIENTS
 # get all the gradients (this will have the output neurons in the last dimension)
 # gradients has shape (n_samples, n_features, n_classes)
-gradients = get_gradients(mesh, network, params)
+gradients = get_gradients(mesh, network, OUTPUT_NEURON_SELECTED, params)
 # select gradients for only one output neuron and normalize their length
-gradients_plotting = normalize_arrows(gradients[..., OUTPUT_NEURON_SELECTED])
+gradients_plotting = normalize_arrows(gradients)
 
 plt.figure()
 plot_background(params)
@@ -681,8 +681,8 @@ plt.title("gradients")
 # PATTERNS
 # compute A from the Haufe paper.
 # The columns of A are the activation patterns, i. e. A has shape (n_features, n_classes)
-patterns = get_patterns(gradients, Sigma_X, Sigma_s_inv)
-patterns_plotting = normalize_arrows(patterns[..., OUTPUT_NEURON_SELECTED])
+patterns = get_patterns(mesh, network, OUTPUT_NEURON_SELECTED, params, Sigma_X, Sigma_s_inv)
+patterns_plotting = normalize_arrows(patterns)
 plt.figure()
 plot_background(params)
 plt.quiver(mesh[:, 0], mesh[:, 1], patterns_plotting[:, 0], patterns_plotting[:, 1], scale=None)
@@ -690,7 +690,7 @@ plt.title("patterns")
 
 # RELEVANCE
 relevance = easyLRP(mesh, network, OUTPUT_NEURON_SELECTED, params, rule="alphabeta", alpha=2)
-relevance_plotting = normalize_arrows(relevance[..., OUTPUT_NEURON_SELECTED])
+relevance_plotting = normalize_arrows(relevance)
 plt.figure()
 plot_background(params)
 plt.quiver(mesh[:, 0], mesh[:, 1], relevance_plotting[:, 0], relevance_plotting[:, 1], scale=None)
@@ -743,13 +743,11 @@ params["specific_dataclass"] = None
 A = get_horseshoe_pattern(params["horseshoe_distractors"])
 
 # MLP
-W_mlp = get_gradients(X, mlp, mlp_params)
-A_haufe_mlp = get_patterns(W_mlp, Sigma_X, Sigma_s_inv)
-relevance_mlp = easyLRP(X, mlp, OUTPUT_NEURON_SELECTED, mlp_params, epsilon=0.00001)[..., OUTPUT_NEURON_SELECTED]
+W_mlp = get_gradients(X, mlp, OUTPUT_NEURON_SELECTED, mlp_params)
+A_haufe_mlp = get_patterns(X, mlp, OUTPUT_NEURON_SELECTED, mlp_params, Sigma_X, Sigma_s_inv)
+relevance_mlp = easyLRP(X, mlp, OUTPUT_NEURON_SELECTED, mlp_params, epsilon=0.00001)
 
 # plot real pattern, input point, weights and haufe pattern for MLP
-W_mlp = W_mlp[..., OUTPUT_NEURON_SELECTED]
-A_haufe_mlp = A_haufe_mlp[..., OUTPUT_NEURON_SELECTED]
 fig, axes = plt.subplots(1, 5, figsize=(15, 5))
 plot_heatmap(A[:, 0].reshape((10, 10)), axis=axes[0], title="True pattern")
 plot_heatmap(X.reshape((10, 10)), axis=axes[1], title="input point")
@@ -760,14 +758,15 @@ plt.suptitle("MLP", size=16)
 
 
 # CNN
-W_cnn = get_gradients(X.reshape(cnn_params["network_input_shape"]), cnn, cnn_params)
-A_haufe_cnn = get_patterns(W_cnn, Sigma_X, Sigma_s_inv)
+W_cnn = get_gradients(
+    X.reshape(cnn_params["network_input_shape"]), cnn, OUTPUT_NEURON_SELECTED, cnn_params)
+A_haufe_cnn = get_patterns(
+    X.reshape(cnn_params["network_input_shape"]), cnn, OUTPUT_NEURON_SELECTED, cnn_params,
+    Sigma_X, Sigma_s_inv)
 relevance_cnn = easyLRP(
-        X.reshape(cnn_params["network_input_shape"]), cnn, OUTPUT_NEURON_SELECTED, cnn_params)[..., OUTPUT_NEURON_SELECTED]
+    X.reshape(cnn_params["network_input_shape"]), cnn, OUTPUT_NEURON_SELECTED, cnn_params)
 
 # plot real pattern, input point, weights and haufe pattern for CNN
-W_cnn = W_cnn[..., OUTPUT_NEURON_SELECTED]
-A_haufe_cnn = A_haufe_cnn[..., OUTPUT_NEURON_SELECTED]
 fig, axes = plt.subplots(1, 5, figsize=(15, 5))
 plot_heatmap(A[:, 0].reshape((10, 10)), axis=axes[0], title="True pattern")
 plot_heatmap(X.reshape((10, 10)), axis=axes[1], title="input point")
