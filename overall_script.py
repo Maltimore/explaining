@@ -4,9 +4,10 @@ import numpy as np
 import theano
 import theano.tensor as T
 import lasagne
+from lasagne.nonlinearities import softmax
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-from sklearn.linear_model import LogisticRegression
+#from sklearn.linear_model import LogisticRegression
 import copy
 na = np.newaxis
 
@@ -404,7 +405,7 @@ def easyLRP(X, network, output_neuron, params, rule="epsilon", epsilon=.01, alph
     :returns: relevance, array of shape X.shape + (n_classes,)
     """
     # get all gradients and select the gradients with respect to the output_neuron desired
-    gradients = get_gradients(X, params)
+    gradients = get_gradients(X, network, params)
     relevance = gradients * X[..., np.newaxis]
     return relevance
 
@@ -527,7 +528,7 @@ def compute_accuracy(y, y_hat):
     return p_correct
 
 
-def get_gradients(X, params):
+def get_gradients(X, network, params):
     """get_gradients
 
     :param X: array, shape network_input_shape
@@ -538,15 +539,22 @@ def get_gradients(X, params):
          the first axis contains samples, the last axis contains the
          class indices with regard to which the gradient is taken
     """
+    replaced_nonlinearity = False
+    if hasattr(network, "nonlinearity") and network.nonlinearity == softmax:
+        network.nonlinearity = lambda x: x
+        replaced_nonlinearity = True
 
     gradients = np.empty(X.shape + (params["n_classes"],))
     for output_idx in range(params["n_classes"]):
         gradient_var = T.grad(params["output_var"][0, output_idx], params["input_var"])
         compute_grad = theano.function(
-                [params["input_var"]], gradient_var, allow_input_downcast=True)
+            [params["input_var"]], gradient_var, allow_input_downcast=True)
         for sample_idx in range(X.shape[0]):
             gradients[sample_idx, ..., output_idx] = compute_grad(X[[sample_idx]])
     gradients.reshape(X.shape + (-1,))
+
+    if replaced_nonlinearity:
+        network.nonlinearity = softmax
     return gradients
 
 
@@ -636,58 +644,58 @@ def normalize_arrows(arrows, length=0.3):
     return arrows
 
 
-#######################################################################
-## RING DATA
-## train MLP on ring data
-#params["layer_sizes"] = [8]
-#params["data"] = "ring"
-#params["model"] = "custom"
-#params["n_classes"] = 2
-#params["network_input_shape"] = (-1, 2)
-#params["epochs"] = 30
-#network, params = train_network(params)
-#OUTPUT_NEURON_SELECTED = 0
-#VECTOR_ADJUST_CONSTANT = 3
-#
-#X, y = create_data(params, 5000)
-#
-#Sigma_X = np.cov(X, rowvar=False)
-#Sigma_s = np.cov(one_hot_encoding(y, params["n_classes"]), rowvar=False)
-#Sigma_s_inv = np.linalg.pinv(Sigma_s)
-#
-#mesh = create_2d_mesh()
-#
-## GRADIENTS
-## get all the gradients (this will have the output neurons in the last dimension)
-## gradients has shape (n_samples, n_features, n_classes)
-#gradients = get_gradients(mesh, params)
-## select gradients for only one output neuron and normalize their length
-#gradients_plotting = normalize_arrows(gradients[..., OUTPUT_NEURON_SELECTED])
-#
-#plt.figure()
-#plot_background(params)
-#plt.quiver(mesh[:, 0], mesh[:, 1], gradients_plotting[:, 0], gradients_plotting[:, 1], scale=None)
-#plt.title("gradients")
-#
-#
-## PATTERNS
-## compute A from the Haufe paper.
-## The columns of A are the activation patterns, i. e. A has shape (n_features, n_classes)
-#patterns = get_patterns(gradients, Sigma_X, Sigma_s_inv)
-#patterns_plotting = normalize_arrows(patterns[..., OUTPUT_NEURON_SELECTED])
-#plt.figure()
-#plot_background(params)
-#plt.quiver(mesh[:, 0], mesh[:, 1], patterns_plotting[:, 0], patterns_plotting[:, 1], scale=None)
-#plt.title("patterns")
-#
-## RELEVANCE
-#relevance = easyLRP(mesh, network, OUTPUT_NEURON_SELECTED, params, rule="alphabeta", alpha=2)
-#relevance_plotting = normalize_arrows(relevance[..., OUTPUT_NEURON_SELECTED])
-#plt.figure()
-#plot_background(params)
-#plt.quiver(mesh[:, 0], mesh[:, 1], relevance_plotting[:, 0], relevance_plotting[:, 1], scale=None)
-#plt.title("relevance")
-#plt.show()
+######################################################################
+# RING DATA
+# train MLP on ring data
+params["layer_sizes"] = [8]
+params["data"] = "ring"
+params["model"] = "mlp"
+params["n_classes"] = 2
+params["network_input_shape"] = (-1, 2)
+params["epochs"] = 30
+network, params = train_network(params)
+OUTPUT_NEURON_SELECTED = 0
+VECTOR_ADJUST_CONSTANT = 3
+
+X, y = create_data(params, 5000)
+
+Sigma_X = np.cov(X, rowvar=False)
+Sigma_s = np.cov(one_hot_encoding(y, params["n_classes"]), rowvar=False)
+Sigma_s_inv = np.linalg.pinv(Sigma_s)
+
+mesh = create_2d_mesh()
+
+# GRADIENTS
+# get all the gradients (this will have the output neurons in the last dimension)
+# gradients has shape (n_samples, n_features, n_classes)
+gradients = get_gradients(mesh, network, params)
+# select gradients for only one output neuron and normalize their length
+gradients_plotting = normalize_arrows(gradients[..., OUTPUT_NEURON_SELECTED])
+
+plt.figure()
+plot_background(params)
+plt.quiver(mesh[:, 0], mesh[:, 1], gradients_plotting[:, 0], gradients_plotting[:, 1], scale=None)
+plt.title("gradients")
+
+
+# PATTERNS
+# compute A from the Haufe paper.
+# The columns of A are the activation patterns, i. e. A has shape (n_features, n_classes)
+patterns = get_patterns(gradients, Sigma_X, Sigma_s_inv)
+patterns_plotting = normalize_arrows(patterns[..., OUTPUT_NEURON_SELECTED])
+plt.figure()
+plot_background(params)
+plt.quiver(mesh[:, 0], mesh[:, 1], patterns_plotting[:, 0], patterns_plotting[:, 1], scale=None)
+plt.title("patterns")
+
+# RELEVANCE
+relevance = easyLRP(mesh, network, OUTPUT_NEURON_SELECTED, params, rule="alphabeta", alpha=2)
+relevance_plotting = normalize_arrows(relevance[..., OUTPUT_NEURON_SELECTED])
+plt.figure()
+plot_background(params)
+plt.quiver(mesh[:, 0], mesh[:, 1], relevance_plotting[:, 0], relevance_plotting[:, 1], scale=None)
+plt.title("relevance")
+plt.show()
 
 ######################################################################
 # HORSESHOE DATA
@@ -735,7 +743,7 @@ params["specific_dataclass"] = None
 A = get_horseshoe_pattern(params["horseshoe_distractors"])
 
 # MLP
-W_mlp = get_gradients(X, mlp_params)
+W_mlp = get_gradients(X, mlp, mlp_params)
 A_haufe_mlp = get_patterns(W_mlp, Sigma_X, Sigma_s_inv)
 relevance_mlp = easyLRP(X, mlp, OUTPUT_NEURON_SELECTED, mlp_params, epsilon=0.00001)[..., OUTPUT_NEURON_SELECTED]
 
@@ -752,7 +760,7 @@ plt.suptitle("MLP", size=16)
 
 
 # CNN
-W_cnn = get_gradients(X.reshape(cnn_params["network_input_shape"]), cnn_params)
+W_cnn = get_gradients(X.reshape(cnn_params["network_input_shape"]), cnn, cnn_params)
 A_haufe_cnn = get_patterns(W_cnn, Sigma_X, Sigma_s_inv)
 relevance_cnn = easyLRP(
         X.reshape(cnn_params["network_input_shape"]), cnn, OUTPUT_NEURON_SELECTED, cnn_params)[..., OUTPUT_NEURON_SELECTED]
