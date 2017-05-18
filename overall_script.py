@@ -142,7 +142,7 @@ def create_ring_data(params, N):
     """
     Creates 2d data aligned in clusters aligned on a ring
     """
-    n_centers = 8
+    n_centers = 7
     n_per_center = int(np.ceil(N / n_centers))
     C = .02*np.eye(2)
     radius = 1
@@ -568,6 +568,7 @@ def plot_background(params):
     Z = Z[:, OUTPUT_NEURON_SELECTED]
     # reshape to mesh shape
     Z = Z.reshape(xx.shape)
+    Z = np.flipud(Z)
 
     # due to annoying matplotlib behavior (matplotlib plots lines despite
     # marker="o"), we have to loop here.
