@@ -710,20 +710,35 @@ params["network_input_shape"] = (-1, 100)
 params["layer_sizes"] = [100, 10]  # as requested by pieter-jan
 mlp, mlp_params = train_network(params.copy())
 mlp_prediction_func = mlp_params["prediction_func"]
+if hasattr(mlp, "nonlinearity") and mlp.nonlinearity == softmax:
+    mlp.nonlinearity = lambda x: x
+output_var_mlp = lasagne.layers.get_output(mlp)
+raw_output_mlp_f = theano.function([mlp_params["input_var"]],
+    output_var_mlp, allow_input_downcast=True)
 
 params["model"] = "cnn"
 params["network_input_shape"] = (-1, 1, 10, 10)
 params["epochs"] = 1
 cnn, cnn_params = train_network(params.copy())
 cnn_prediction_func = cnn_params["prediction_func"]
+if hasattr(cnn, "nonlinearity") and cnn.nonlinearity == softmax:
+    cnn.nonlinearity = lambda x: x
+output_var_cnn = lasagne.layers.get_output(cnn)
+raw_output_cnn_f = theano.function([cnn_params["input_var"]],
+   output_var_cnn, allow_input_downcast=True)
 
 ##### compare prediction scores ###
 # some more data
 X, y = create_data(params, 500)
 
+y_hat_mlp = raw_output_mlp_f(X)
+y_hat_cnn = raw_output_cnn_f(X.reshape(cnn_params["network_input_shape"]))
+
 Sigma_X = np.cov(X, rowvar=False)
-Sigma_s = np.cov(one_hot_encoding(y, params["n_classes"]), rowvar=False)
-Sigma_s_inv = np.linalg.pinv(Sigma_s)
+Sigma_s_mlp = np.cov(y_hat_mlp, rowvar=False)
+Sigma_s_mlp_inv = np.linalg.pinv(Sigma_s_mlp)
+Sigma_s_cnn = np.cov(y_hat_cnn, rowvar=False)
+Sigma_s_cnn_inv = np.linalg.pinv(Sigma_s_cnn)
 
 # predict with mlp
 mlp_prediction = mlp_prediction_func(X)
@@ -745,7 +760,7 @@ A = get_horseshoe_pattern(params["horseshoe_distractors"])
 
 # MLP
 W_mlp = get_gradients(X, mlp, OUTPUT_NEURON_SELECTED, mlp_params)
-A_haufe_mlp = get_patterns(X, mlp, OUTPUT_NEURON_SELECTED, mlp_params, Sigma_X, Sigma_s_inv)
+A_haufe_mlp = get_patterns(X, mlp, OUTPUT_NEURON_SELECTED, mlp_params, Sigma_X, Sigma_s_mlp_inv)
 relevance_mlp = easyLRP(X, mlp, OUTPUT_NEURON_SELECTED, mlp_params, epsilon=0.00001)
 
 # plot real pattern, input point, weights and haufe pattern for MLP
@@ -763,7 +778,7 @@ W_cnn = get_gradients(
     X.reshape(cnn_params["network_input_shape"]), cnn, OUTPUT_NEURON_SELECTED, cnn_params)
 A_haufe_cnn = get_patterns(
     X.reshape(cnn_params["network_input_shape"]), cnn, OUTPUT_NEURON_SELECTED, cnn_params,
-    Sigma_X, Sigma_s_inv)
+    Sigma_X, Sigma_s_cnn_inv)
 relevance_cnn = easyLRP(
     X.reshape(cnn_params["network_input_shape"]), cnn, OUTPUT_NEURON_SELECTED, cnn_params)
 
