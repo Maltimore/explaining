@@ -13,24 +13,19 @@ na = np.newaxis
 
 # imports from this project
 import mytools
+import networks
 import main_methods
+import load_mnist
 theano.config.optimizer = "None"
-# HORSESHOE DATA
-OUTPUT_NEURON_SELECTED = 0
 
 params = mytools.get_CLI_parameters(sys.argv)
 
-# regular mlp
 params["model"] = "mlp"
-params["data"] = "horseshoe"
-params["n_classes"] = 4
-params["network_input_shape"] = (-1, 100)
-params["layer_sizes"] = [100, 10]  # as requested by pieter-jan
+params["data"] = "mnist"
+params["n_classes"] = 10
+params["network_input_shape"] = (-1, 28 * 28)
 
-# CREATE DATA
-X_train, y_train = main_methods.create_data(params, params["N_train"])
-X_val, y_val = main_methods.create_data(params, params["N_val"])
-X_test, y_test = main_methods.create_data(params, params["N_test"])
+X_train, y_train, X_val, y_val, X_test, y_test = load_mnist.load_dataset()
 data = (X_train, y_train,
         X_val, y_val,
         X_test, y_test)
@@ -46,14 +41,14 @@ raw_output_mlp_f = theano.function([mlp_params["input_var"]],
 
 # CNN TRAINING
 params["model"] = "cnn"
-params["network_input_shape"] = (-1, 1, 10, 10)
+params["network_input_shape"] = (-1, 1, 28, 28)
 params["epochs"] = 1
-X_train = X_train.reshape(params["network_input_shape"])
-X_val = X_val.reshape(params["network_input_shape"])
-X_test = X_test.reshape(params["network_input_shape"])
-data = (X_train, y_train,
-        X_val, y_val,
-        X_test, y_test)
+#X_train = X_train.reshape(params["network_input_shape"])
+#X_val = X_val.reshape(params["network_input_shape"])
+#X_test = X_test.reshape(params["network_input_shape"])
+data = (X_train.reshape(params["network_input_shape"]), y_train,
+        X_val.reshape(params["network_input_shape"]), y_val,
+        X_test.reshape(params["network_input_shape"]), y_test)
 cnn, cnn_params = main_methods.train_network(data, params)
 
 cnn_prediction_func = cnn_params["prediction_func"]
@@ -64,7 +59,7 @@ raw_output_cnn_f = theano.function([cnn_params["input_var"]],
    output_var_cnn, allow_input_downcast=True)
 
 # some more data
-X, y = main_methods.create_data(params, 5000)
+X, y = (X_val[:1000], y_val[:1000])
 
 y_hat_mlp = raw_output_mlp_f(X)
 y_hat_cnn = raw_output_cnn_f(X.reshape(cnn_params["network_input_shape"]))
@@ -89,22 +84,23 @@ print("CNN score: " + str(cnn_score))
 ######
 # get an input point for which we want the weights / patterns
 params["specific_dataclass"] = 0
-X, y = main_methods.create_data(params, 1)
-params["specific_dataclass"] = None
-A = main_methods.get_horseshoe_pattern(params["horseshoe_distractors"])
+X, y = (X_val[[0]], y_val[[0]])
+OUTPUT_NEURON_SELECTED = y_val[0]
+#params["specific_dataclass"] = None
+#A = main_methods.get_horseshoe_pattern(params["horseshoe_distractors"])
 
 # MLP
 W_mlp = main_methods.get_gradients(X, mlp, OUTPUT_NEURON_SELECTED, mlp_params)
 A_haufe_mlp = main_methods.get_patterns(X, mlp, OUTPUT_NEURON_SELECTED, mlp_params, Sigma_X, Sigma_s_mlp_inv)
 relevance_mlp = main_methods.easyLRP(X, mlp, OUTPUT_NEURON_SELECTED, mlp_params, epsilon=0.00001)
 
+heatmap_shape = cnn_params["network_input_shape"][-2:]
 # plot real pattern, input point, weights and haufe pattern for MLP
-fig, axes = plt.subplots(1, 5, figsize=(15, 5))
-main_methods.plot_heatmap(A[:, OUTPUT_NEURON_SELECTED].reshape((10, 10)), axis=axes[0], title="True pattern")
-main_methods.plot_heatmap(X.reshape((10, 10)), axis=axes[1], title="input point")
-main_methods.plot_heatmap(W_mlp.reshape((10, 10)), axis=axes[2], title="gradient")
-main_methods.plot_heatmap(A_haufe_mlp.reshape((10, 10)), axis=axes[3], title="pattern Haufe 2014")
-main_methods.plot_heatmap(relevance_mlp.reshape((10, 10)), axis=axes[4], title="LRP")
+fig, axes = plt.subplots(1, 4, figsize=(15, 5))
+main_methods.plot_heatmap(X.reshape(heatmap_shape), axis=axes[0], title="input point")
+main_methods.plot_heatmap(W_mlp.reshape(heatmap_shape), axis=axes[1], title="gradient")
+main_methods.plot_heatmap(A_haufe_mlp.reshape(heatmap_shape), axis=axes[2], title="pattern Haufe 2014")
+main_methods.plot_heatmap(relevance_mlp.reshape(heatmap_shape), axis=axes[3], title="LRP")
 plt.suptitle("MLP", size=16)
 
 
@@ -118,11 +114,10 @@ relevance_cnn = main_methods.easyLRP(
     X.reshape(cnn_params["network_input_shape"]), cnn, OUTPUT_NEURON_SELECTED, cnn_params)
 
 # plot real pattern, input point, weights and haufe pattern for CNN
-fig, axes = plt.subplots(1, 5, figsize=(15, 5))
-main_methods.plot_heatmap(A[:, OUTPUT_NEURON_SELECTED].reshape((10, 10)), axis=axes[0], title="True pattern")
-main_methods.plot_heatmap(X.reshape((10, 10)), axis=axes[1], title="input point")
-main_methods.plot_heatmap(W_cnn.reshape((10, 10)), axis=axes[2], title="gradient")
-main_methods.plot_heatmap(A_haufe_cnn.reshape((10, 10)), axis=axes[3], title="pattern Haufe 2014")
-main_methods.plot_heatmap(relevance_cnn.reshape((10, 10)), axis=axes[4], title="LRP")
+fig, axes = plt.subplots(1, 4, figsize=(15, 5))
+main_methods.plot_heatmap(X.reshape(heatmap_shape), axis=axes[0], title="input point")
+main_methods.plot_heatmap(W_cnn.reshape(heatmap_shape), axis=axes[1], title="gradient")
+main_methods.plot_heatmap(A_haufe_cnn.reshape(heatmap_shape), axis=axes[2], title="pattern Haufe 2014")
+main_methods.plot_heatmap(relevance_cnn.reshape(heatmap_shape), axis=axes[3], title="LRP")
 plt.suptitle("CNN", size=16)
 plt.show()
