@@ -184,11 +184,9 @@ def train_network(params):
     X_val, y_val = create_data(params, params["N_val"])
     X_test, y_test = create_data(params, params["N_test"])
 
-    # if we're training the CNN, we need extra dimensions
-    if params["model"] == "cnn":
-        X_train = X_train.reshape(params["network_input_shape"])
-        X_val = X_val.reshape(params["network_input_shape"])
-        X_test = X_test.reshape(params["network_input_shape"])
+    X_train = X_train.reshape(params["network_input_shape"])
+    X_val = X_val.reshape(params["network_input_shape"])
+    X_test = X_test.reshape(params["network_input_shape"])
 
     if not params["network_input_shape"][1:] == X_train.shape[1:]:
         raise ValueError("parameter network_input_shape didn't fit train data")
