@@ -16,11 +16,6 @@ import mytools
 import networks
 theano.config.optimizer = "None"
 
-if __name__ == "__main__" and "-f" not in sys.argv:
-    params = mytools.get_CLI_parameters(sys.argv)
-else:
-    params = mytools.get_CLI_parameters([])
-
 
 def one_hot_encoding(target, n_classes):
     if len(target.shape) > 1:
@@ -578,7 +573,7 @@ def get_patterns(X, network, output_neuron, params, Sigma_X, Sigma_s_inv):
     return patterns
 
 
-def plot_background(params):
+def plot_background(OUTPUT_NEURON_SELECTED, params):
     """
     This function is for the ring data example only
     """
@@ -645,162 +640,3 @@ def normalize_arrows(arrows, length=0.3):
     # make all arrows length length
     arrows *= length
     return arrows
-
-
-######################################################################
-# RING DATA
-# train MLP on ring data
-params["layer_sizes"] = [8]
-params["data"] = "ring"
-params["model"] = "mlp"
-params["n_classes"] = 2
-params["network_input_shape"] = (-1, 2)
-params["epochs"] = 30
-network, params = train_network(params)
-OUTPUT_NEURON_SELECTED = 0
-VECTOR_ADJUST_CONSTANT = 3
-
-if hasattr(network, "nonlinearity") and network.nonlinearity == softmax:
-    network.nonlinearity = lambda x: x
-output_var_network = lasagne.layers.get_output(network)
-raw_output_network_f = theano.function([params["input_var"]],
-    output_var_network, allow_input_downcast=True)
-
-X, y = create_data(params, 5000)
-
-y_hat = raw_output_network_f(X)
-
-Sigma_X = np.cov(X, rowvar=False)
-Sigma_s = np.cov(y_hat, rowvar=False)
-Sigma_s_inv = np.linalg.pinv(Sigma_s)
-
-mesh = create_2d_mesh()
-
-# GRADIENTS
-# get all the gradients (this will have the output neurons in the last dimension)
-# gradients has shape (n_samples, n_features, n_classes)
-gradients = get_gradients(mesh, network, OUTPUT_NEURON_SELECTED, params)
-# select gradients for only one output neuron and normalize their length
-gradients_plotting = normalize_arrows(gradients)
-
-plt.figure()
-plot_background(params)
-plt.quiver(mesh[:, 0], mesh[:, 1], gradients_plotting[:, 0], gradients_plotting[:, 1], scale=None)
-plt.title("gradients")
-
-
-# PATTERNS
-# compute A from the Haufe paper.
-# The columns of A are the activation patterns, i. e. A has shape (n_features, n_classes)
-patterns = get_patterns(mesh, network, OUTPUT_NEURON_SELECTED, params, Sigma_X, Sigma_s_inv)
-patterns_plotting = normalize_arrows(patterns)
-plt.figure()
-plot_background(params)
-plt.quiver(mesh[:, 0], mesh[:, 1], patterns_plotting[:, 0], patterns_plotting[:, 1], scale=None)
-plt.title("patterns")
-
-# RELEVANCE
-relevance = easyLRP(mesh, network, OUTPUT_NEURON_SELECTED, params, rule="alphabeta", alpha=2)
-relevance_plotting = normalize_arrows(relevance)
-plt.figure()
-plot_background(params)
-plt.quiver(mesh[:, 0], mesh[:, 1], relevance_plotting[:, 0], relevance_plotting[:, 1], scale=None)
-plt.title("relevance")
-plt.show()
-
-######################################################################
-# HORSESHOE DATA
-OUTPUT_NEURON_SELECTED = 0
-
-# regular mlp
-params["model"] = "mlp"
-params["data"] = "horseshoe"
-params["n_classes"] = 4
-params["network_input_shape"] = (-1, 100)
-params["layer_sizes"] = [100, 10]  # as requested by pieter-jan
-mlp, mlp_params = train_network(params.copy())
-mlp_prediction_func = mlp_params["prediction_func"]
-if hasattr(mlp, "nonlinearity") and mlp.nonlinearity == softmax:
-    mlp.nonlinearity = lambda x: x
-output_var_mlp = lasagne.layers.get_output(mlp)
-raw_output_mlp_f = theano.function([mlp_params["input_var"]],
-    output_var_mlp, allow_input_downcast=True)
-
-params["model"] = "cnn"
-params["network_input_shape"] = (-1, 1, 10, 10)
-params["epochs"] = 1
-cnn, cnn_params = train_network(params.copy())
-cnn_prediction_func = cnn_params["prediction_func"]
-if hasattr(cnn, "nonlinearity") and cnn.nonlinearity == softmax:
-    cnn.nonlinearity = lambda x: x
-output_var_cnn = lasagne.layers.get_output(cnn)
-raw_output_cnn_f = theano.function([cnn_params["input_var"]],
-   output_var_cnn, allow_input_downcast=True)
-
-##### compare prediction scores ###
-# some more data
-X, y = create_data(params, 5000)
-
-y_hat_mlp = raw_output_mlp_f(X)
-y_hat_cnn = raw_output_cnn_f(X.reshape(cnn_params["network_input_shape"]))
-
-Sigma_X = np.cov(X, rowvar=False)
-Sigma_s_mlp = np.cov(y_hat_mlp, rowvar=False)
-Sigma_s_mlp_inv = np.linalg.pinv(Sigma_s_mlp)
-Sigma_s_cnn = np.cov(y_hat_cnn, rowvar=False)
-Sigma_s_cnn_inv = np.linalg.pinv(Sigma_s_cnn)
-
-# predict with mlp
-mlp_prediction = mlp_prediction_func(X)
-mlp_score = compute_accuracy(y, mlp_prediction)
-
-# predict with cnn
-cnn_prediction = cnn_prediction_func(X.reshape(params["network_input_shape"]))
-cnn_score = compute_accuracy(y, cnn_prediction)
-
-print("MLP score: " + str(mlp_score))
-print("CNN score: " + str(cnn_score))
-
-######
-# get an input point for which we want the weights / patterns
-params["specific_dataclass"] = 0
-X, y = create_data(params, 1)
-params["specific_dataclass"] = None
-A = get_horseshoe_pattern(params["horseshoe_distractors"])
-
-# MLP
-W_mlp = get_gradients(X, mlp, OUTPUT_NEURON_SELECTED, mlp_params)
-A_haufe_mlp = get_patterns(X, mlp, OUTPUT_NEURON_SELECTED, mlp_params, Sigma_X, Sigma_s_mlp_inv)
-relevance_mlp = easyLRP(X, mlp, OUTPUT_NEURON_SELECTED, mlp_params, epsilon=0.00001)
-
-# plot real pattern, input point, weights and haufe pattern for MLP
-fig, axes = plt.subplots(1, 5, figsize=(15, 5))
-plot_heatmap(A[:, 0].reshape((10, 10)), axis=axes[0], title="True pattern")
-plot_heatmap(X.reshape((10, 10)), axis=axes[1], title="input point")
-plot_heatmap(W_mlp.reshape((10, 10)), axis=axes[2], title="gradient")
-plot_heatmap(A_haufe_mlp.reshape((10, 10)), axis=axes[3], title="pattern Haufe 2014")
-plot_heatmap(relevance_mlp.reshape((10, 10)), axis=axes[4], title="LRP")
-plt.suptitle("MLP", size=16)
-
-
-# CNN
-W_cnn = get_gradients(
-    X.reshape(cnn_params["network_input_shape"]), cnn, OUTPUT_NEURON_SELECTED, cnn_params)
-A_haufe_cnn = get_patterns(
-    X.reshape(cnn_params["network_input_shape"]), cnn, OUTPUT_NEURON_SELECTED, cnn_params,
-    Sigma_X, Sigma_s_cnn_inv)
-relevance_cnn = easyLRP(
-    X.reshape(cnn_params["network_input_shape"]), cnn, OUTPUT_NEURON_SELECTED, cnn_params)
-
-# plot real pattern, input point, weights and haufe pattern for CNN
-fig, axes = plt.subplots(1, 5, figsize=(15, 5))
-plot_heatmap(A[:, 0].reshape((10, 10)), axis=axes[0], title="True pattern")
-plot_heatmap(X.reshape((10, 10)), axis=axes[1], title="input point")
-plot_heatmap(W_cnn.reshape((10, 10)), axis=axes[2], title="gradient")
-plot_heatmap(A_haufe_cnn.reshape((10, 10)), axis=axes[3], title="pattern Haufe 2014")
-plot_heatmap(relevance_cnn.reshape((10, 10)), axis=axes[4], title="LRP")
-plt.suptitle("CNN", size=16)
-
-#######
-if params["do_plotting"]:
-    plt.show()
