@@ -356,8 +356,6 @@ def LRP(X, network, output_neuron, params, rule="epsilon", epsilon=.01, alpha=0.
 
     W_mats, biases = get_network_parameters(network, params["bias_in_data"])
     activations = forward_pass(X, network, params["input_var"], params)
-    # reshape the input activations to be a shapeless vector
-    activations[0] = activations[0]
 
     Relevances = np.empty(X.shape)
     # --- relevance backpropagation ---
@@ -476,8 +474,14 @@ def alphabeta_rule(R, W, b, activations_current_layer, alpha):
         inputs_to_j = W[j] * activations_current_layer
 
         # get the indicies of the positive and negative inputs
-        positive_inputs = inputs_to_j >= 0
-        negative_inputs = ~positive_inputs
+        positive_inputs_idxes = inputs_to_j >= 0
+        negative_inputs_idxes = ~positive_inputs_idxes
+
+        # get two arrays that hold the positive and negative inputs respectively
+        positive_inputs = inputs_to_j.copy()
+        positive_inputs[negative_inputs_idxes] = 0
+        negative_inputs = inputs_to_j.copy()
+        negative_inputs[positive_inputs_idxes] = 0
 
         if b[j] >= 0:
             positive_bias = b[j]
@@ -486,8 +490,8 @@ def alphabeta_rule(R, W, b, activations_current_layer, alpha):
             positive_bias = 0
             negative_bias = b[j]
 
-        positive_preactivation = np.sum(inputs_to_j[positive_inputs]) + positive_bias
-        negative_preactivation = np.sum(inputs_to_j[negative_inputs]) + negative_bias
+        positive_preactivation = np.sum(positive_inputs) + positive_bias
+        negative_preactivation = np.sum(negative_inputs) + negative_bias
 
         R_messages_from_j = R[j] * (
                     alpha * positive_inputs / positive_preactivation +
