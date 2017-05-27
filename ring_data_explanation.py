@@ -26,7 +26,16 @@ params["model"] = "mlp"
 params["n_classes"] = 2
 params["network_input_shape"] = (-1, 2)
 params["epochs"] = 30
-network, params = main_methods.train_network(params)
+
+# CREATE DATA
+X_train, y_train = main_methods.create_data(params, params["N_train"])
+X_val, y_val = main_methods.create_data(params, params["N_val"])
+X_test, y_test = main_methods.create_data(params, params["N_test"])
+data = (X_train, y_train,
+        X_val, y_val,
+        X_test, y_test)
+
+network, params = main_methods.train_network(data, params)
 OUTPUT_NEURON_SELECTED = 0
 VECTOR_ADJUST_CONSTANT = 3
 

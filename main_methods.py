@@ -100,6 +100,7 @@ def create_data(params, N):
     elif params["data"] == "ring":
         X, y = create_ring_data(params, N)
     else:
+        X
         raise("Requested datatype unknown")
     permutation = np.random.permutation(N)
     X = X[permutation]
@@ -178,15 +179,9 @@ def iterate_minibatches(inputs, targets, batchsize, shuffle=True):
         yield inputs[excerpt], targets[excerpt]
 
 
-def train_network(params):
+def train_network(data, params):
     params = copy.deepcopy(params)
-    X_train, y_train = create_data(params, params["N_train"])
-    X_val, y_val = create_data(params, params["N_val"])
-    X_test, y_test = create_data(params, params["N_test"])
-
-    X_train = X_train.reshape(params["network_input_shape"])
-    X_val = X_val.reshape(params["network_input_shape"])
-    X_test = X_test.reshape(params["network_input_shape"])
+    X_train, y_train, X_val, y_val, X_test, y_test = data
 
     if not params["network_input_shape"][1:] == X_train.shape[1:]:
         raise ValueError("parameter network_input_shape didn't fit train data")

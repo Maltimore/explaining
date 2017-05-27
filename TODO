@@ -1,6 +1,7 @@
 TODO
 compare easy LRP and traditional LRP
 rename specific_dataclass
+make distractors in horseshoe appear only solo
 
 DONE
 make LRP accept several samples

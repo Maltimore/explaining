@@ -13,7 +13,6 @@ na = np.newaxis
 
 # imports from this project
 import mytools
-import networks
 import main_methods
 theano.config.optimizer = "None"
 # HORSESHOE DATA
@@ -27,7 +26,17 @@ params["data"] = "horseshoe"
 params["n_classes"] = 4
 params["network_input_shape"] = (-1, 100)
 params["layer_sizes"] = [100, 10]  # as requested by pieter-jan
-mlp, mlp_params = main_methods.train_network(params.copy())
+
+# CREATE DATA
+X_train, y_train = main_methods.create_data(params, params["N_train"])
+X_val, y_val = main_methods.create_data(params, params["N_val"])
+X_test, y_test = main_methods.create_data(params, params["N_test"])
+data = (X_train, y_train,
+        X_val, y_val,
+        X_test, y_test)
+
+# MLP TRAINING
+mlp, mlp_params = main_methods.train_network(data, params)
 mlp_prediction_func = mlp_params["prediction_func"]
 if hasattr(mlp, "nonlinearity") and mlp.nonlinearity == softmax:
     mlp.nonlinearity = lambda x: x
@@ -35,10 +44,18 @@ output_var_mlp = lasagne.layers.get_output(mlp)
 raw_output_mlp_f = theano.function([mlp_params["input_var"]],
     output_var_mlp, allow_input_downcast=True)
 
+# CNN TRAINING
 params["model"] = "cnn"
 params["network_input_shape"] = (-1, 1, 10, 10)
 params["epochs"] = 1
-cnn, cnn_params = main_methods.train_network(params.copy())
+X_train = X_train.reshape(params["network_input_shape"])
+X_val = X_val.reshape(params["network_input_shape"])
+X_test = X_test.reshape(params["network_input_shape"])
+data = (X_train, y_train,
+        X_val, y_val,
+        X_test, y_test)
+cnn, cnn_params = main_methods.train_network(data, params)
+
 cnn_prediction_func = cnn_params["prediction_func"]
 if hasattr(cnn, "nonlinearity") and cnn.nonlinearity == softmax:
     cnn.nonlinearity = lambda x: x
