@@ -22,7 +22,7 @@ params = mytools.get_CLI_parameters(sys.argv)
 # train MLP on ring data
 params["layer_sizes"] = [8]
 params["data"] = "ring"
-params["model"] = "mlp"
+params["model"] = "custom"
 params["n_classes"] = 2
 params["network_input_shape"] = (-1, 2)
 params["epochs"] = 30

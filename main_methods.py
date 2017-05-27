@@ -141,7 +141,7 @@ def create_ring_data(params, N):
     """
     n_centers = 8
     n_per_center = int(np.ceil(N / n_centers))
-    C = .02*np.eye(2)
+    C = .015*np.eye(2)
     radius = 1
     class_means = radius*np.array([[np.cos(i*2.*np.pi/n_centers),np.sin(i*2.*np.pi/n_centers)] for i in range(n_centers)])
 

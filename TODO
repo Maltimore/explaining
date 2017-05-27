@@ -12,4 +12,4 @@ add LRP to horseshoe plots
 remove color bar from horseshoe plots
 refactor plot_w_or_patterns
 rename params["get_output"] into params["output_func"]
-figure out the bias DONE
+figure out the bias
