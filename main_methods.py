@@ -349,6 +349,10 @@ def LRP(X, network, output_neuron, params, rule="epsilon", epsilon=.01, alpha=0.
 
     :returns: relevance, array of shape X.shape
     """
+    replaced_nonlinearity = False
+    if hasattr(network, "nonlinearity") and network.nonlinearity == softmax:
+        network.nonlinearity = lambda x: x
+        replaced_nonlinearity = True
 
     W_mats, biases = get_network_parameters(network, params["bias_in_data"])
     activations = forward_pass(X, network, params["input_var"], params)
@@ -365,14 +369,17 @@ def LRP(X, network, output_neuron, params, rule="epsilon", epsilon=.01, alpha=0.
         # list that holds all weight matrices
         W_mats[-1] = W_mats[-1][[output_neuron]]
         # loop from end to beginning starting at the second last layer
-        for idx in np.arange(len(activations)-2, -1, -1):
-            if rule is "epsilon":
+        for idx in np.arange(len(activations) - 2, -1, -1):
+            if rule == "epsilon":
                 R = epsilon_rule(R, W_mats[idx], biases[idx], activations[idx][sample_idx], epsilon)
             elif rule == "alphabeta":
                 R = alphabeta_rule(R, W_mats[idx], biases[idx], activations[idx][sample_idx], alpha)
             else:
                 raise Exception("Unrecognized rule selected")
         Relevances[sample_idx] = R.reshape((X.shape[1:]))
+
+    if replaced_nonlinearity:
+        network.nonlinearity = softmax
     return Relevances
 
 
