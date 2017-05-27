@@ -100,8 +100,7 @@ def create_data(params, N):
     elif params["data"] == "ring":
         X, y = create_ring_data(params, N)
     else:
-        X
-        raise("Requested datatype unknown")
+        raise Exception("Requested datatype unknown")
     permutation = np.random.permutation(N)
     X = X[permutation]
     y = y[permutation]
@@ -115,7 +114,7 @@ def create_horseshoe_data(params, N):
         # this should only be triggered if N=1, in this case the user
         # requests a datapoint of a specific class
         if N != 1:
-            raise("specific_dataclass is set so N should be 1")
+            raise Exception("specific_dataclass is set so N should be 1")
         y = np.array([params["specific_dataclass"]])
     else:
         # if no specific class is requested, generate classes randomly
