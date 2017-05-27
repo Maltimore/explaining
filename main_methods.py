@@ -373,7 +373,7 @@ def LRP(X, network, output_neuron, params, rule="epsilon", epsilon=.01, alpha=0.
             else:
                 raise Exception("Unrecognized rule selected")
         Relevances[sample_idx] = R.reshape((X.shape[1:]))
-    return R
+    return Relevances
 
 
 def easyLRP(X, network, output_neuron, params, rule="epsilon", epsilon=.01, alpha=0.5):
