@@ -14,7 +14,7 @@ def get_CLI_parameters(argv):
     parser.add_argument("--noise_scale", default=0.4, type=float)
     parser.add_argument("-e", "--epochs", default=30, type=int)
     parser.add_argument("-m", "--model", default="cnn")
-    parser.add_argument("--layer_sizes", default="8")
+    parser.add_argument("--layer_sizes", default="100,100")
     parser.add_argument("-p", "--do_plotting", default=True)
     parser.add_argument("--verbose", default=True)
     parser.add_argument("-d", "--data", default="horseshoe")

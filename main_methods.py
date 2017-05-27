@@ -311,7 +311,7 @@ def forward_pass(X, network, input_var, params):
         allow_input_downcast=True)
     activations = get_activations(X)
     for i in range(len(activations)):
-        activations[i] = activations[i].squeeze()
+        activations[i] = activations[i]
     return activations
 
 
@@ -353,25 +353,26 @@ def LRP(X, network, output_neuron, params, rule="epsilon", epsilon=.01, alpha=0.
     W_mats, biases = get_network_parameters(network, params["bias_in_data"])
     activations = forward_pass(X, network, params["input_var"], params)
     # reshape the input activations to be a shapeless vector
-    activations[0] = activations[0].reshape((-1,))
+    activations[0] = activations[0]
 
+    Relevances = np.empty(X.shape)
     # --- relevance backpropagation ---
-    # the first backpass is special so it can't be in the loop. Here we "compute" the
-    # relevance in the last layer (set relevance to activation)
-    R = np.array([activations[-1][output_neuron], ])
-    # extract the relevant row from the last weight matrix and save it into the
-    # list that holds all weight matrices
-    W_mats[-1] = W_mats[-1][[output_neuron]]
-    # loop from end to beginning starting at the second last layer
-    for idx in np.arange(len(activations)-2, -1, -1):
-        if rule is "epsilon":
-            R = epsilon_rule(R, W_mats[idx], biases[idx], activations[idx], epsilon)
-        elif rule == "alphabeta":
-            R = alphabeta_rule(R, W_mats[idx], biases[idx], activations[idx], alpha)
-        else:
-            raise Exception("Unrecognized rule selected")
-
-    R = R.reshape((X.shape))
+    for sample_idx in range(X.shape[0]):
+        # the first backpass is special so it can't be in the loop. Here we "compute" the
+        # relevance in the last layer (set relevance to activation)
+        R = np.array([activations[-1][sample_idx, output_neuron], ])
+        # extract the relevant row from the last weight matrix and save it into the
+        # list that holds all weight matrices
+        W_mats[-1] = W_mats[-1][[output_neuron]]
+        # loop from end to beginning starting at the second last layer
+        for idx in np.arange(len(activations)-2, -1, -1):
+            if rule is "epsilon":
+                R = epsilon_rule(R, W_mats[idx], biases[idx], activations[idx][sample_idx], epsilon)
+            elif rule == "alphabeta":
+                R = alphabeta_rule(R, W_mats[idx], biases[idx], activations[idx][sample_idx], alpha)
+            else:
+                raise Exception("Unrecognized rule selected")
+        Relevances[sample_idx] = R.reshape((X.shape[1:]))
     return R
 
 
