@@ -20,9 +20,9 @@ theano.config.optimizer = "None"
 params = mytools.get_CLI_parameters(sys.argv)
 
 # train MLP on ring data
-params["layer_sizes"] = [8]
+params["layer_sizes"] = [10]
 params["data"] = "ring"
-params["model"] = "custom"
+params["model"] = "mlp"
 params["n_classes"] = 2
 params["network_input_shape"] = (-1, 2)
 params["epochs"] = 30
@@ -48,6 +48,7 @@ raw_output_network_f = theano.function([params["input_var"]],
 
 X, y = main_methods.create_data(params, 5000)
 
+#########################
 # PLOTTING (only data)
 # due to annoying matplotlib behavior (matplotlib plots lines despite
 # marker="o"), we have to loop here.
@@ -77,33 +78,34 @@ Sigma_s_inv = np.linalg.pinv(Sigma_s)
 mesh = main_methods.create_2d_mesh()
 
 # GRADIENTS
-# get all the gradients (this will have the output neurons in the last dimension)
-# gradients has shape (n_samples, n_features, n_classes)
+# get all the gradients 
+# gradients has shape (n_samples, n_features)
 gradients = main_methods.get_gradients(mesh, network, OUTPUT_NEURON_SELECTED, params)
-# select gradients for only one output neuron and normalize their length
 gradients_plotting = main_methods.normalize_arrows(gradients)
-
-plt.figure()
-main_methods.plot_background(OUTPUT_NEURON_SELECTED, params)
-plt.quiver(mesh[:, 0], mesh[:, 1], gradients_plotting[:, 0], gradients_plotting[:, 1], scale=None)
-plt.title("gradients")
-
 
 # PATTERNS
 # compute A from the Haufe paper.
 # The columns of A are the activation patterns, i. e. A has shape (n_features, n_classes)
 patterns = main_methods.get_patterns(mesh, network, OUTPUT_NEURON_SELECTED, params, Sigma_X, Sigma_s_inv)
 patterns_plotting = main_methods.normalize_arrows(patterns)
-plt.figure()
-main_methods.plot_background(OUTPUT_NEURON_SELECTED, params)
-plt.quiver(mesh[:, 0], mesh[:, 1], patterns_plotting[:, 0], patterns_plotting[:, 1], scale=None)
-plt.title("patterns")
 
 # RELEVANCE
 relevance = main_methods.easyLRP(mesh, network, OUTPUT_NEURON_SELECTED, params, rule="alphabeta", alpha=2)
 relevance_plotting = main_methods.normalize_arrows(relevance)
-plt.figure()
-main_methods.plot_background(OUTPUT_NEURON_SELECTED, params)
-plt.quiver(mesh[:, 0], mesh[:, 1], relevance_plotting[:, 0], relevance_plotting[:, 1], scale=None)
-plt.title("relevance")
+
+# PLOTTING
+fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+main_methods.plot_background(OUTPUT_NEURON_SELECTED, params, axes[0])
+axes[0].quiver(mesh[:, 0], mesh[:, 1], gradients_plotting[:, 0], gradients_plotting[:, 1], scale=None)
+axes[0].set_title("gradients")
+
+main_methods.plot_background(OUTPUT_NEURON_SELECTED, params, axes[1])
+axes[1].quiver(mesh[:, 0], mesh[:, 1], patterns_plotting[:, 0], patterns_plotting[:, 1], scale=None)
+axes[1].set_title("patterns")
+
+main_methods.plot_background(OUTPUT_NEURON_SELECTED, params, axes[2])
+axes[2].quiver(mesh[:, 0], mesh[:, 1], relevance_plotting[:, 0], relevance_plotting[:, 1], scale=None)
+axes[2].set_title("LRP")
+
 plt.show()
+###########################

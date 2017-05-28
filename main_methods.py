@@ -140,7 +140,7 @@ def create_ring_data(params, N):
     """
     n_centers = 8
     n_per_center = int(np.ceil(N / n_centers))
-    C = .015*np.eye(2)
+    C = .017*np.eye(2)
     radius = 1
     class_means = radius*np.array([[np.cos(i*2.*np.pi/n_centers),np.sin(i*2.*np.pi/n_centers)] for i in range(n_centers)])
 
@@ -579,7 +579,7 @@ def get_patterns(X, network, output_neuron, params, Sigma_X, Sigma_s_inv):
     return patterns
 
 
-def plot_background(OUTPUT_NEURON_SELECTED, params):
+def plot_background(OUTPUT_NEURON_SELECTED, params, axis):
     """
     This function is for the ring data example only
     """
@@ -606,22 +606,22 @@ def plot_background(OUTPUT_NEURON_SELECTED, params):
     class_1_mask = (y == 0).squeeze()
     class_2_mask = (y == 1).squeeze()
     for idx in range(X[:500].shape[0]):
-        plt.plot(X[class_1_mask, 0][idx], X[class_1_mask, 1][idx],
-                 color="white",
-                 marker="o",
-                 fillstyle="full",
-                 markeredgecolor="black")
-        plt.plot(X[class_2_mask, 0][idx], X[class_2_mask, 1][idx],
-                 color="black",
-                 marker="o",
-                 fillstyle="full",
-                 markeredgecolor="black")
-    plt.imshow(Z, interpolation="nearest", cmap=cm.gray, alpha=0.4,
-               extent=[x_min, x_max, y_min, y_max])
-    plt.xticks([])
-    plt.yticks([])
-    plt.xlim(xx.min(), xx.max())
-    plt.ylim(yy.min(), yy.max())
+        axis.plot(X[class_1_mask, 0][idx], X[class_1_mask, 1][idx],
+                  color="white",
+                  marker="o",
+                  fillstyle="full",
+                  markeredgecolor="black")
+        axis.plot(X[class_2_mask, 0][idx], X[class_2_mask, 1][idx],
+                  color="black",
+                  marker="o",
+                  fillstyle="full",
+                  markeredgecolor="black")
+    axis.imshow(Z, interpolation="nearest", cmap=cm.gray, alpha=0.4,
+                extent=[x_min, x_max, y_min, y_max])
+    axis.set_xticks([])
+    axis.set_yticks([])
+    axis.set_xlim(xx.min(), xx.max())
+    axis.set_ylim(yy.min(), yy.max())
 
 
 def create_2d_mesh(interval=0.2):
