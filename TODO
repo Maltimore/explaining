@@ -1,9 +1,9 @@
 TODO
-compare easy LRP and traditional LRP
 rename specific_dataclass
-make distractors in horseshoe appear only solo
 
 DONE
+make distractors in horseshoe appear only solo
+compare easy LRP and traditional LRP
 make LRP accept several samples
 fix pattern computation (multiply by Sigma_s_inv)
 remove softmax layer before analysing

@@ -26,6 +26,7 @@ params["data"] = "horseshoe"
 params["n_classes"] = 4
 params["network_input_shape"] = (-1, 100)
 params["layer_sizes"] = [100, 10]  # as requested by pieter-jan
+params["epochs"] = 30
 params["noise_scale"] = 0.2
 
 # CREATE DATA
@@ -48,7 +49,7 @@ raw_output_mlp_f = theano.function([mlp_params["input_var"]],
 # CNN TRAINING
 params["model"] = "cnn"
 params["network_input_shape"] = (-1, 1, 10, 10)
-params["epochs"] = 1
+params["epochs"] = 3
 
 X_train = X_train.reshape(params["network_input_shape"])
 X_val = X_val.reshape(params["network_input_shape"])
@@ -94,6 +95,13 @@ params["specific_dataclass"] = OUTPUT_NEURON_SELECTED
 X, y = main_methods.create_data(params, 1)
 A = main_methods.get_horseshoe_patterns(params["horseshoe_distractors"])
 
+# PLOTTING ############################
+fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+main_methods.plot_heatmap(A[:, OUTPUT_NEURON_SELECTED].reshape((10, 10)), axis=axes[0], title="pattern")
+main_methods.plot_heatmap(A[:, OUTPUT_NEURON_SELECTED + 4].reshape((10, 10)), axis=axes[1], title="distractor")
+main_methods.plot_heatmap(X.reshape((10, 10)), axis=axes[2], title="final sample")
+#######################################
+
 # MLP
 W_mlp = main_methods.get_gradients(X, mlp, OUTPUT_NEURON_SELECTED, mlp_params)
 A_haufe_mlp = main_methods.get_patterns(X, mlp, OUTPUT_NEURON_SELECTED, mlp_params, Sigma_X, Sigma_s_mlp_inv)
@@ -102,7 +110,7 @@ relevance_mlp = main_methods.easyLRP(X, mlp, OUTPUT_NEURON_SELECTED, mlp_params,
 # plot real pattern, input point, weights and haufe pattern for MLP
 fig, axes = plt.subplots(1, 5, figsize=(15, 5))
 main_methods.plot_heatmap(A[:, OUTPUT_NEURON_SELECTED].reshape((10, 10)), axis=axes[0], title="True pattern")
-main_methods.plot_heatmap(X.reshape((10, 10)), axis=axes[1], title="input point")
+main_methods.plot_heatmap(X.reshape((10, 10)), axis=axes[1], title="sample")
 main_methods.plot_heatmap(W_mlp.reshape((10, 10)), axis=axes[2], title="gradient")
 main_methods.plot_heatmap(A_haufe_mlp.reshape((10, 10)), axis=axes[3], title="pattern Haufe 2014")
 main_methods.plot_heatmap(relevance_mlp.reshape((10, 10)), axis=axes[4], title="LRP")
@@ -121,7 +129,7 @@ relevance_cnn = main_methods.easyLRP(
 # plot real pattern, input point, weights and haufe pattern for CNN
 fig, axes = plt.subplots(1, 5, figsize=(15, 5))
 main_methods.plot_heatmap(A[:, OUTPUT_NEURON_SELECTED].reshape((10, 10)), axis=axes[0], title="True pattern")
-main_methods.plot_heatmap(X.reshape((10, 10)), axis=axes[1], title="input point")
+main_methods.plot_heatmap(X.reshape((10, 10)), axis=axes[1], title="sample")
 main_methods.plot_heatmap(W_cnn.reshape((10, 10)), axis=axes[2], title="gradient")
 main_methods.plot_heatmap(A_haufe_cnn.reshape((10, 10)), axis=axes[3], title="pattern Haufe 2014")
 main_methods.plot_heatmap(relevance_cnn.reshape((10, 10)), axis=axes[4], title="LRP")
