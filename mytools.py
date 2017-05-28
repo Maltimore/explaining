@@ -14,7 +14,7 @@ def get_CLI_parameters(argv):
     parser.add_argument("--noise_scale", default=0.4, type=float)
     parser.add_argument("-e", "--epochs", default=30, type=int)
     parser.add_argument("-m", "--model", default="cnn")
-    parser.add_argument("--layer_sizes", default="100,100")
+    parser.add_argument("--layer_sizes", default="500,100,100")
     parser.add_argument("-p", "--do_plotting", default=True)
     parser.add_argument("--verbose", default=True)
     parser.add_argument("-d", "--data", default="horseshoe")
@@ -27,7 +27,7 @@ def get_CLI_parameters(argv):
     params["N_train"] = 10000
     params["N_val"] = 1000
     params["N_test"] = 1000
-    params["minibatch_size"] = 30
+    params["minibatch_size"] = 50
     params["horseshoe_distractors"] = True
     params["specific_dataclass"] = None
     params["network_input_shape"] = (None, 1, 10, 10)
@@ -47,6 +47,4 @@ def get_CLI_parameters(argv):
         os.makedirs(params["results_dir"])
     if not os.path.exists(params["plots_dir"]):
         os.makedirs(params["plots_dir"])
-
     return params
-

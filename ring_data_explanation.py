@@ -26,6 +26,7 @@ params["model"] = "custom"
 params["n_classes"] = 2
 params["network_input_shape"] = (-1, 2)
 params["epochs"] = 30
+params["N_train"] = 40000
 
 # CREATE DATA
 X_train, y_train = main_methods.create_data(params, params["N_train"])
@@ -46,6 +47,26 @@ raw_output_network_f = theano.function([params["input_var"]],
     output_var_network, allow_input_downcast=True)
 
 X, y = main_methods.create_data(params, 5000)
+
+# PLOTTING (only data)
+# due to annoying matplotlib behavior (matplotlib plots lines despite
+# marker="o"), we have to loop here.
+class_1_mask = (y == 0).squeeze()
+class_2_mask = (y == 1).squeeze()
+for idx in range(X[:500].shape[0]):
+    plt.plot(X[class_1_mask, 0][idx], X[class_1_mask, 1][idx],
+             color="white",
+             marker="o",
+             fillstyle="full",
+             markeredgecolor="black")
+    plt.plot(X[class_2_mask, 0][idx], X[class_2_mask, 1][idx],
+             color="black",
+             marker="o",
+             fillstyle="full",
+             markeredgecolor="black")
+plt.xticks([])
+plt.yticks([])
+#########################
 
 y_hat = raw_output_network_f(X)
 

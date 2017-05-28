@@ -24,7 +24,7 @@ params["model"] = "mlp"
 params["data"] = "mnist"
 params["n_classes"] = 10
 params["network_input_shape"] = (-1, 28 * 28)
-params["epochs"] = 1
+params["epochs"] = 3
 heatmap_shape = (28, 28)
 
 X_train, y_train, X_val, y_val, X_test, y_test = load_mnist.load_dataset()
@@ -100,7 +100,7 @@ OUTPUT_NEURON_SELECTED = y_val[0]
 W_mlp = main_methods.get_gradients(X, mlp, OUTPUT_NEURON_SELECTED, mlp_params)
 A_haufe_mlp = main_methods.get_patterns(X, mlp, OUTPUT_NEURON_SELECTED, mlp_params, Sigma_X, Sigma_s_mlp_inv)
 relevance_mlp = main_methods.LRP(X, mlp, OUTPUT_NEURON_SELECTED, mlp_params,
-    rule="alphabeta", alpha=0.5, epsilon=0.01)
+    rule="alphabeta", alpha=2, epsilon=0.01)
 
 # plot real pattern, input point, weights and haufe pattern for MLP
 fig, axes = plt.subplots(1, 4, figsize=(15, 5))

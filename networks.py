@@ -19,10 +19,10 @@ def build_custom_ringpredictor(params, input_var=None):
     # layer that computes cos(input_point, class_center)
     current_layer = lasagne.layers.DenseLayer(
                                 current_layer,
-                                num_units=8,
+                                num_units=n_centers,
                                 W=precomputed_W)
     # layer that figures
-    current_layer = lasagne.layers.FeaturePoolLayer(current_layer, pool_size=4)
+    current_layer = lasagne.layers.FeaturePoolLayer(current_layer, pool_size=int(n_centers/2))
     l_out = lasagne.layers.FeatureWTALayer(current_layer, pool_size=2)
     return l_out
 

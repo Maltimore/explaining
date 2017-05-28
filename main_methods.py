@@ -138,7 +138,7 @@ def create_ring_data(params, N):
     """
     Creates 2d data aligned in clusters aligned on a ring
     """
-    n_centers = 4
+    n_centers = 8
     n_per_center = int(np.ceil(N / n_centers))
     C = .015*np.eye(2)
     radius = 1
