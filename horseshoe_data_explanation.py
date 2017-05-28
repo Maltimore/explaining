@@ -7,7 +7,7 @@ import lasagne
 from lasagne.nonlinearities import softmax
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-#from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LogisticRegression
 import copy
 na = np.newaxis
 
@@ -37,6 +37,12 @@ data = (X_train, y_train,
         X_val, y_val,
         X_test, y_test)
 
+# LOGISTIC REGRESSION TRAINING
+logreg = LogisticRegression()
+logreg.fit(X_train, y_train)
+print("LogReg score: " + str(logreg.score(X_test, y_test)))
+
+
 # MLP TRAINING
 mlp, mlp_params = main_methods.train_network(data, params)
 mlp_prediction_func = mlp_params["prediction_func"]
@@ -49,7 +55,7 @@ raw_output_mlp_f = theano.function([mlp_params["input_var"]],
 # CNN TRAINING
 params["model"] = "cnn"
 params["network_input_shape"] = (-1, 1, 10, 10)
-params["epochs"] = 3
+params["epochs"] = 1
 
 X_train = X_train.reshape(params["network_input_shape"])
 X_val = X_val.reshape(params["network_input_shape"])
@@ -69,10 +75,13 @@ raw_output_cnn_f = theano.function([cnn_params["input_var"]],
 # some more data
 X, y = main_methods.create_data(params, 5000)
 
+y_hat_logreg = logreg.predict_proba(X)
 y_hat_mlp = raw_output_mlp_f(X)
 y_hat_cnn = raw_output_cnn_f(X.reshape(cnn_params["network_input_shape"]))
 
 Sigma_X = np.cov(X, rowvar=False)
+Sigma_s_logreg = np.cov(y_hat_logreg, rowvar=False)
+Sigma_s_logreg_inv = np.linalg.pinv(Sigma_s_logreg)
 Sigma_s_mlp = np.cov(y_hat_mlp, rowvar=False)
 Sigma_s_mlp_inv = np.linalg.pinv(Sigma_s_mlp)
 Sigma_s_cnn = np.cov(y_hat_cnn, rowvar=False)
@@ -101,6 +110,18 @@ main_methods.plot_heatmap(A[:, OUTPUT_NEURON_SELECTED].reshape((10, 10)), axis=a
 main_methods.plot_heatmap(A[:, OUTPUT_NEURON_SELECTED + 4].reshape((10, 10)), axis=axes[1], title="distractor")
 main_methods.plot_heatmap(X.reshape((10, 10)), axis=axes[2], title="final sample")
 #######################################
+
+# LOGISTIC REGRESSION
+W_logreg = logreg.coef_.T
+A_haufe_logreg = np.einsum('jk,kl,lm->jm', Sigma_X, W_logreg, Sigma_s_logreg_inv)[..., OUTPUT_NEURON_SELECTED]
+
+# plot real pattern, input point, weights and haufe pattern for MLP
+fig, axes = plt.subplots(1, 4, figsize=(10, 5))
+main_methods.plot_heatmap(A[:, OUTPUT_NEURON_SELECTED].reshape((10, 10)), axis=axes[0], title="True pattern")
+main_methods.plot_heatmap(X.reshape((10, 10)), axis=axes[1], title="sample")
+main_methods.plot_heatmap(W_logreg[..., OUTPUT_NEURON_SELECTED].reshape((10, 10)), axis=axes[2], title="gradient")
+main_methods.plot_heatmap(A_haufe_logreg.reshape((10, 10)), axis=axes[3], title="pattern Haufe 2014")
+plt.suptitle("Logistic regression", size=16)
 
 # MLP
 W_mlp = main_methods.get_gradients(X, mlp, OUTPUT_NEURON_SELECTED, mlp_params)
