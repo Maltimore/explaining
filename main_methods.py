@@ -100,7 +100,7 @@ def create_data(params, N):
     elif params["data"] == "ring":
         X, y = create_ring_data(params, N)
     else:
-        raise Exception("Requested datatype unknown")
+        raise Exception(f"Requested datatype {params['data']} unknown")
     permutation = np.random.permutation(N)
     X = X[permutation]
     y = y[permutation]
@@ -138,12 +138,14 @@ def create_ring_data(params, N):
     """
     Creates 2d data aligned in clusters aligned on a ring
     """
-    n_centers = 8
+    n_centers = 4
     n_per_center = int(np.ceil(N / n_centers))
     C = .015*np.eye(2)
     radius = 1
     class_means = radius*np.array([[np.cos(i*2.*np.pi/n_centers),np.sin(i*2.*np.pi/n_centers)] for i in range(n_centers)])
 
+    # here I pulled the first iteration out of the following loop that's why I do
+    # range(1, n_centers)
     X = np.random.multivariate_normal((0, 0), C, size=n_per_center) + class_means[0, :]
     y = np.ones((n_per_center,)) * int(0 % params["n_classes"])
     for idx in range(1, n_centers):
@@ -583,7 +585,6 @@ def plot_background(OUTPUT_NEURON_SELECTED, params):
     """
     # create some data for scatterplot
     X, y = create_data(params, 2000)
-    y = params["prediction_func"](X)
 
     # create a mesh to plot in
     h = .01  # step size in the mesh
