@@ -112,12 +112,12 @@ def create_data(params, N):
 def create_horseshoe_data(params, N):
     A = get_horseshoe_patterns(params["horseshoe_distractors"])
 
-    if params["specific_dataclass"] is not None:
+    if params["sample_of_class"] is not None:
         # this should only be triggered if N=1, in this case the user
         # requests a datapoint of a specific class
         if N != 1:
-            raise Exception("specific_dataclass is set so N should be 1")
-        y = np.array([params["specific_dataclass"]])
+            raise Exception("sample_of_class is set so N should be 1")
+        y = np.array([params["sample_of_class"]])
     else:
         # if no specific class is requested, generate classes randomly
         y = np.random.randint(low=0, high=4, size=N)
@@ -576,6 +576,8 @@ def get_patterns(X, network, output_neuron, params, Sigma_X, Sigma_s_inv):
 
     :returns: patterns, array of shape gradients.shape
     """
+
+    # loop over the classes and for each class get gradients for all samples
     W = np.empty((X.shape[0], Sigma_X.shape[0], Sigma_s_inv.shape[0]))
     for class_idx in range(Sigma_s_inv.shape[0]):
         W[..., class_idx] = get_gradients(X, network, class_idx, params).reshape((X.shape[0], Sigma_X.shape[0]))

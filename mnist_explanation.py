@@ -90,10 +90,10 @@ print("MLP score: " + str(mlp_score))
 
 ######
 # get an input point for which we want the weights / patterns
-params["specific_dataclass"] = 0
+params["sample_of_class"] = 0
 X, y = (X_val[[0]], y_val[[0]])
 OUTPUT_NEURON_SELECTED = y_val[0]
-#params["specific_dataclass"] = None
+#params["sample_of_class"] = None
 #A = main_methods.get_horseshoe_pattern(params["horseshoe_distractors"])
 
 # MLP

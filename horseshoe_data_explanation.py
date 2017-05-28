@@ -91,7 +91,7 @@ print("CNN score: " + str(cnn_score))
 
 ######
 # get an input point for which we want the weights / patterns
-params["specific_dataclass"] = OUTPUT_NEURON_SELECTED
+params["sample_of_class"] = OUTPUT_NEURON_SELECTED
 X, y = main_methods.create_data(params, 1)
 A = main_methods.get_horseshoe_patterns(params["horseshoe_distractors"])
 
