@@ -22,7 +22,7 @@ params = mytools.get_CLI_parameters(sys.argv)
 # train MLP on ring data
 params["layer_sizes"] = [10]
 params["data"] = "ring"
-params["model"] = "mlp"
+params["model"] = "custom"
 params["n_classes"] = 2
 params["network_input_shape"] = (-1, 2)
 params["epochs"] = 30
@@ -54,6 +54,7 @@ X, y = main_methods.create_data(params, 5000)
 # marker="o"), we have to loop here.
 class_1_mask = (y == 0).squeeze()
 class_2_mask = (y == 1).squeeze()
+plt.figure(figsize=(5, 5))
 for idx in range(X[:500].shape[0]):
     plt.plot(X[class_1_mask, 0][idx], X[class_1_mask, 1][idx],
              color="white",
