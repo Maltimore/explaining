@@ -20,12 +20,13 @@ OUTPUT_NEURON_SELECTED = 0
 
 params = mytools.get_CLI_parameters(sys.argv)
 
-# regular mlp
+# set custom parameters
 params["model"] = "mlp"
 params["data"] = "horseshoe"
 params["n_classes"] = 4
 params["network_input_shape"] = (-1, 100)
 params["layer_sizes"] = [100, 10]  # as requested by pieter-jan
+params["noise_scale"] = 0.2
 
 # CREATE DATA
 X_train, y_train = main_methods.create_data(params, params["N_train"])
@@ -48,6 +49,7 @@ raw_output_mlp_f = theano.function([mlp_params["input_var"]],
 params["model"] = "cnn"
 params["network_input_shape"] = (-1, 1, 10, 10)
 params["epochs"] = 1
+
 X_train = X_train.reshape(params["network_input_shape"])
 X_val = X_val.reshape(params["network_input_shape"])
 X_test = X_test.reshape(params["network_input_shape"])
@@ -88,10 +90,9 @@ print("CNN score: " + str(cnn_score))
 
 ######
 # get an input point for which we want the weights / patterns
-params["specific_dataclass"] = 0
+params["specific_dataclass"] = OUTPUT_NEURON_SELECTED
 X, y = main_methods.create_data(params, 1)
-params["specific_dataclass"] = None
-A = main_methods.get_horseshoe_pattern(params["horseshoe_distractors"])
+A = main_methods.get_horseshoe_patterns(params["horseshoe_distractors"])
 
 # MLP
 W_mlp = main_methods.get_gradients(X, mlp, OUTPUT_NEURON_SELECTED, mlp_params)

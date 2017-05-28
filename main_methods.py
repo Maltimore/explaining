@@ -25,7 +25,7 @@ def one_hot_encoding(target, n_classes):
     return encoding
 
 
-def get_horseshoe_pattern(horseshoe_distractors):
+def get_horseshoe_patterns(horseshoe_distractors):
     if horseshoe_distractors:
         A = np.empty((100, 8))
     else:
@@ -51,6 +51,7 @@ def get_horseshoe_pattern(horseshoe_distractors):
 
     if not horseshoe_distractors:
         return A
+    A_saved = A.copy()
 
     # create the patterns for the distractors
     pic = np.zeros((10, 10))
@@ -66,25 +67,26 @@ def get_horseshoe_pattern(horseshoe_distractors):
     pic[7, 4] = 1
     pic[6, 3] = 1
     pic[5, 2] = 1
-    for distractor in np.arange(4, 8):
+    for distractor_idx in np.arange(4, 8):
         current_pic = pic.copy()
-        if distractor == 4:
+        if distractor_idx == 4:
             current_pic[4, 2] = 0
             current_pic[3, 3] = 0
             current_pic[2, 4] = 0
-        elif distractor == 5:
+        elif distractor_idx == 5:
             current_pic[2, 5] = 0
             current_pic[3, 6] = 0
             current_pic[4, 7] = 0
-        elif distractor == 6:
+        elif distractor_idx == 6:
             current_pic[5, 7] = 0
             current_pic[6, 6] = 0
             current_pic[7, 5] = 0
-        elif distractor == 7:
+        elif distractor_idx == 7:
             current_pic[7, 4] = 0
             current_pic[6, 3] = 0
             current_pic[5, 2] = 0
-        A[:, distractor] = current_pic.flatten()
+        # insert into the big pattern matrix
+        A[:, distractor_idx] = current_pic.flatten()
     return A
 
 
@@ -108,7 +110,7 @@ def create_data(params, N):
 
 
 def create_horseshoe_data(params, N):
-    A = get_horseshoe_pattern(params["horseshoe_distractors"])
+    A = get_horseshoe_patterns(params["horseshoe_distractors"])
 
     if params["specific_dataclass"] is not None:
         # this should only be triggered if N=1, in this case the user
@@ -123,14 +125,17 @@ def create_horseshoe_data(params, N):
     y_onehot = one_hot_encoding(y, params["n_classes"]).T
 
     if params["horseshoe_distractors"]:
-        y_dist = np.random.normal(size=(4, N))
-        y_onehot = np.concatenate((y_onehot, y_dist), axis=0)
+        y_distractors = np.random.randint(0, 4, size=(y.shape[0]))
+        # hardcode the first distractor to always be 0
+        y_distractors[0] = 0
+        y_distractors_onehot = one_hot_encoding(y_distractors, 4).T
+        y_onehot = np.concatenate((y_onehot, y_distractors_onehot), axis=0)
 
     # create X by multiplying the target vector with the patterns,
     # and tranpose because we want the data to be in [samples, features] form
     X = np.dot(A, y_onehot).T
     for idx in range(X.shape[0]):
-        X[idx, :] += (np.random.normal(size=(100))*params["noise_scale"])
+        X[idx, :] += (np.random.normal(size=(100)) * params["noise_scale"])
     return X, y.astype(np.int32)
 
 
