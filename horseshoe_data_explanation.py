@@ -23,6 +23,10 @@ def create_all_plots(params, logreg_axes, mlp_axes, cnn_axes):
     X_train, y_train = main_methods.create_data(params, params["N_train"])
     X_val, y_val = main_methods.create_data(params, params["N_val"])
     X_test, y_test = main_methods.create_data(params, params["N_test"])
+    mean_X = np.mean(X_train, axis=0)
+    X_train -= mean_X
+    X_val -= mean_X
+    X_test -= mean_X
     data = (X_train, y_train,
             X_val, y_val,
             X_test, y_test)
@@ -64,6 +68,7 @@ def create_all_plots(params, logreg_axes, mlp_axes, cnn_axes):
 
     # some more data
     X, y = main_methods.create_data(params, 5000)
+    X -= mean_X
 
     y_hat_logreg = logreg.predict_proba(X)
     y_hat_mlp = raw_output_mlp_f(X)
@@ -92,13 +97,14 @@ def create_all_plots(params, logreg_axes, mlp_axes, cnn_axes):
     # get an input point for which we want the weights / patterns
     params["sample_of_class"] = OUTPUT_NEURON_SELECTED
     X, y = main_methods.create_data(params, 1)
+    X_unnormalized = np.copy(X)
     A = main_methods.get_horseshoe_patterns(horseshoe_distractors=True)
 
     # PLOTTING ############################
     fig, axes = plt.subplots(1, 3, figsize=(15, 5))
     main_methods.plot_heatmap(A[:, OUTPUT_NEURON_SELECTED].reshape((10, 10)), axis=axes[0], title="pattern")
     main_methods.plot_heatmap(A[:, OUTPUT_NEURON_SELECTED + 4].reshape((10, 10)), axis=axes[1], title="distractor")
-    main_methods.plot_heatmap(X.reshape((10, 10)), axis=axes[2], title="final sample")
+    main_methods.plot_heatmap(X_unnormalized.reshape((10, 10)), axis=axes[2], title="final sample")
     #######################################
 
     # LOGISTIC REGRESSION
@@ -107,7 +113,7 @@ def create_all_plots(params, logreg_axes, mlp_axes, cnn_axes):
 
     # plot real pattern, input point, weights and haufe pattern for MLP
     main_methods.plot_heatmap(A[:, OUTPUT_NEURON_SELECTED].reshape((10, 10)), axis=logreg_axes[0])
-    main_methods.plot_heatmap(X.reshape((10, 10)), axis=logreg_axes[1])
+    main_methods.plot_heatmap(X_unnormalized.reshape((10, 10)), axis=logreg_axes[1])
     main_methods.plot_heatmap(W_logreg[..., OUTPUT_NEURON_SELECTED].reshape((10, 10)), axis=logreg_axes[2])
     main_methods.plot_heatmap(A_haufe_logreg.reshape((10, 10)), axis=logreg_axes[3])
 
@@ -118,7 +124,7 @@ def create_all_plots(params, logreg_axes, mlp_axes, cnn_axes):
 
     # plot real pattern, input point, weights and haufe pattern for MLP
     main_methods.plot_heatmap(A[:, OUTPUT_NEURON_SELECTED].reshape((10, 10)), axis=mlp_axes[0])
-    main_methods.plot_heatmap(X.reshape((10, 10)), axis=mlp_axes[1])
+    main_methods.plot_heatmap(X_unnormalized.reshape((10, 10)), axis=mlp_axes[1])
     main_methods.plot_heatmap(W_mlp.reshape((10, 10)), axis=mlp_axes[2])
     main_methods.plot_heatmap(A_haufe_mlp.reshape((10, 10)), axis=mlp_axes[3])
     main_methods.plot_heatmap(relevance_mlp.reshape((10, 10)), axis=mlp_axes[4])
@@ -135,7 +141,7 @@ def create_all_plots(params, logreg_axes, mlp_axes, cnn_axes):
 
     # plot real pattern, input point, weights and haufe pattern for CNN
     main_methods.plot_heatmap(A[:, OUTPUT_NEURON_SELECTED].reshape((10, 10)), axis=cnn_axes[0])
-    main_methods.plot_heatmap(X.reshape((10, 10)), axis=cnn_axes[1])
+    main_methods.plot_heatmap(X_unnormalized.reshape((10, 10)), axis=cnn_axes[1])
     main_methods.plot_heatmap(W_cnn.reshape((10, 10)), axis=cnn_axes[2])
     main_methods.plot_heatmap(A_haufe_cnn.reshape((10, 10)), axis=cnn_axes[3])
     main_methods.plot_heatmap(relevance_cnn.reshape((10, 10)), axis=cnn_axes[4])
@@ -153,13 +159,13 @@ params["n_classes"] = 4
 params["network_input_shape"] = (-1, 100)
 params["layer_sizes"] = [100, 10]  # as requested by pieter-jan
 params["epochs"] = 30
-params["noise_scale"] = 0.2
+params["noise_scale"] = 0.3
 params["horseshoe_distractors"] = False
 
 logreg_fig, logreg_axes = plt.subplots(2, 4, figsize=(15, 7))
 mlp_fig, mlp_axes= plt.subplots(2, 5, figsize=(15, 5))
 cnn_fig, cnn_axes= plt.subplots(2, 5, figsize=(15, 5))
-ylabel_fontsize = 16
+ylabel_fontsize = 13
 
 # make all plots with no distractors
 create_all_plots(copy.deepcopy(params), logreg_axes[0, :], mlp_axes[0, :], cnn_axes[0, :])
