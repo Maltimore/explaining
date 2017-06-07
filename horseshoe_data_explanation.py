@@ -99,10 +99,11 @@ def create_all_plots(params, logreg_axes, mlp_axes, cnn_axes):
     X, y = main_methods.create_data(params, 1)
     X_unnormalized = np.copy(X)
     A = main_methods.get_horseshoe_patterns(horseshoe_distractors=True)
+    pattern_plt = A[:, OUTPUT_NEURON_SELECTED] - mean_X
 
     # PLOTTING ############################
     fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-    main_methods.plot_heatmap(A[:, OUTPUT_NEURON_SELECTED].reshape((10, 10)), axis=axes[0], title="pattern")
+    main_methods.plot_heatmap(pattern_plt.reshape((10, 10)), axis=axes[0], title="pattern")
     main_methods.plot_heatmap(A[:, OUTPUT_NEURON_SELECTED + 4].reshape((10, 10)), axis=axes[1], title="distractor")
     main_methods.plot_heatmap(X_unnormalized.reshape((10, 10)), axis=axes[2], title="final sample")
     #######################################
@@ -112,7 +113,7 @@ def create_all_plots(params, logreg_axes, mlp_axes, cnn_axes):
     A_haufe_logreg = np.einsum('jk,kl,lm->jm', Sigma_X, W_logreg, Sigma_s_logreg_inv)[..., OUTPUT_NEURON_SELECTED]
 
     # plot real pattern, input point, weights and haufe pattern for MLP
-    main_methods.plot_heatmap(A[:, OUTPUT_NEURON_SELECTED].reshape((10, 10)), axis=logreg_axes[0])
+    main_methods.plot_heatmap(pattern_plt.reshape((10, 10)), axis=logreg_axes[0])
     main_methods.plot_heatmap(X_unnormalized.reshape((10, 10)), axis=logreg_axes[1])
     main_methods.plot_heatmap(W_logreg[..., OUTPUT_NEURON_SELECTED].reshape((10, 10)), axis=logreg_axes[2])
     main_methods.plot_heatmap(A_haufe_logreg.reshape((10, 10)), axis=logreg_axes[3])
@@ -123,7 +124,7 @@ def create_all_plots(params, logreg_axes, mlp_axes, cnn_axes):
     relevance_mlp = main_methods.easyLRP(X, mlp, OUTPUT_NEURON_SELECTED, mlp_params, epsilon=0.00001)
 
     # plot real pattern, input point, weights and haufe pattern for MLP
-    main_methods.plot_heatmap(A[:, OUTPUT_NEURON_SELECTED].reshape((10, 10)), axis=mlp_axes[0])
+    main_methods.plot_heatmap(pattern_plt.reshape((10, 10)), axis=mlp_axes[0])
     main_methods.plot_heatmap(X_unnormalized.reshape((10, 10)), axis=mlp_axes[1])
     main_methods.plot_heatmap(W_mlp.reshape((10, 10)), axis=mlp_axes[2])
     main_methods.plot_heatmap(A_haufe_mlp.reshape((10, 10)), axis=mlp_axes[3])
@@ -140,7 +141,7 @@ def create_all_plots(params, logreg_axes, mlp_axes, cnn_axes):
         X.reshape(cnn_params["network_input_shape"]), cnn, OUTPUT_NEURON_SELECTED, cnn_params)
 
     # plot real pattern, input point, weights and haufe pattern for CNN
-    main_methods.plot_heatmap(A[:, OUTPUT_NEURON_SELECTED].reshape((10, 10)), axis=cnn_axes[0])
+    main_methods.plot_heatmap(pattern_plt.reshape((10, 10)), axis=cnn_axes[0])
     main_methods.plot_heatmap(X_unnormalized.reshape((10, 10)), axis=cnn_axes[1])
     main_methods.plot_heatmap(W_cnn.reshape((10, 10)), axis=cnn_axes[2])
     main_methods.plot_heatmap(A_haufe_cnn.reshape((10, 10)), axis=cnn_axes[3])
