@@ -24,9 +24,12 @@ params["layer_sizes"] = [10]
 params["data"] = "ring"
 params["model"] = "custom"
 params["n_classes"] = 2
+params["noise_scale"] = 0.03
 params["network_input_shape"] = (-1, 2)
 params["epochs"] = 30
 params["N_train"] = 40000
+arrow_length = 0.05
+arrow_width = 0.008
 
 # CREATE DATA
 X_train, y_train = main_methods.create_data(params, params["N_train"])
@@ -76,36 +79,39 @@ Sigma_X = np.cov(X, rowvar=False)
 Sigma_s = np.cov(y_hat, rowvar=False)
 Sigma_s_inv = np.linalg.pinv(Sigma_s)
 
-mesh = main_methods.create_2d_mesh()
+mesh = main_methods.create_2d_mesh(interval=0.3)
 
 # GRADIENTS
 # get all the gradients 
 # gradients has shape (n_samples, n_features)
 gradients = main_methods.get_gradients(mesh, network, OUTPUT_NEURON_SELECTED, params)
-gradients_plotting = main_methods.normalize_arrows(gradients)
+gradients_plotting = main_methods.normalize_arrows(gradients, length=arrow_length)
 
 # PATTERNS
 # compute A from the Haufe paper.
 # The columns of A are the activation patterns, i. e. A has shape (n_features, n_classes)
 patterns = main_methods.get_patterns(mesh, network, OUTPUT_NEURON_SELECTED, params, Sigma_X, Sigma_s_inv)
-patterns_plotting = main_methods.normalize_arrows(patterns)
+patterns_plotting = main_methods.normalize_arrows(patterns, length=arrow_length)
 
 # RELEVANCE
 relevance = main_methods.easyLRP(mesh, network, OUTPUT_NEURON_SELECTED, params, rule="alphabeta", alpha=2)
-relevance_plotting = main_methods.normalize_arrows(relevance)
+relevance_plotting = main_methods.normalize_arrows(relevance, length=arrow_length)
 
 # PLOTTING
 fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 main_methods.plot_background(OUTPUT_NEURON_SELECTED, params, axes[0])
-axes[0].quiver(mesh[:, 0], mesh[:, 1], gradients_plotting[:, 0], gradients_plotting[:, 1], scale=None)
+axes[0].quiver(mesh[:, 0], mesh[:, 1], gradients_plotting[:, 0], gradients_plotting[:, 1],
+               width=arrow_width, scale=1.0)
 axes[0].set_title("gradients")
 
 main_methods.plot_background(OUTPUT_NEURON_SELECTED, params, axes[1])
-axes[1].quiver(mesh[:, 0], mesh[:, 1], patterns_plotting[:, 0], patterns_plotting[:, 1], scale=None)
+axes[1].quiver(mesh[:, 0], mesh[:, 1], patterns_plotting[:, 0], patterns_plotting[:, 1],
+               width=arrow_width, scale=1.0)
 axes[1].set_title("patterns")
 
 main_methods.plot_background(OUTPUT_NEURON_SELECTED, params, axes[2])
-axes[2].quiver(mesh[:, 0], mesh[:, 1], relevance_plotting[:, 0], relevance_plotting[:, 1], scale=None)
+axes[2].quiver(mesh[:, 0], mesh[:, 1], relevance_plotting[:, 0], relevance_plotting[:, 1],
+               width=arrow_width, scale=1.0)
 axes[2].set_title("LRP")
 
 plt.show()

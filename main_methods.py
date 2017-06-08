@@ -147,7 +147,7 @@ def create_ring_data(params, N):
     """
     n_centers = 8
     n_per_center = int(np.ceil(N / n_centers))
-    C = .017*np.eye(2)
+    C = params["noise_scale"] * np.eye(2)
     radius = 1
     class_means = radius*np.array([[np.cos(i*2.*np.pi/n_centers),np.sin(i*2.*np.pi/n_centers)] for i in range(n_centers)])
 
@@ -593,7 +593,7 @@ def plot_background(OUTPUT_NEURON_SELECTED, params, axis):
     This function is for the ring data example only
     """
     # create some data for scatterplot
-    X, y = create_data(params, 2000)
+    X, y = create_data(params, 500)
 
     # create a mesh to plot in
     h = .01  # step size in the mesh
@@ -614,7 +614,7 @@ def plot_background(OUTPUT_NEURON_SELECTED, params, axis):
     # marker="o"), we have to loop here.
     class_1_mask = (y == 0).squeeze()
     class_2_mask = (y == 1).squeeze()
-    for idx in range(X[:500].shape[0]):
+    for idx in range(X[:100].shape[0]):
         axis.plot(X[class_1_mask, 0][idx], X[class_1_mask, 1][idx],
                   color="white",
                   marker="o",
