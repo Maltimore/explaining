@@ -129,6 +129,8 @@ def create_horseshoe_data(params, N):
         # hardcode the first distractor to always be 0
         y_distractors[0] = 0
         y_distractors_onehot = one_hot_encoding(y_distractors, 4).T
+        # new for Gaussian distractors uncomment
+#        y_distractors_onehot = np.random.normal(0, .5, size=(4, N))
         y_onehot = np.concatenate((y_onehot, y_distractors_onehot), axis=0)
 
     # create X by multiplying the target vector with the patterns,
